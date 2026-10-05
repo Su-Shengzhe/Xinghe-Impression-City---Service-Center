@@ -18,9 +18,11 @@
 ## 第二阶段：受控 Agent 客服
 
 - 可选接入 OpenAI-compatible Chat Completions；默认关闭，未启用或请求失败时继续走固定 FAQ/规则路由
-- Agent 仅能调用订单状态、订单物流和在售商品搜索三个只读工具
+- Agent 仅能调用五个只读工具：`query_order_detail`、`query_logistics`、`search_products`、`get_service_policy`、`get_after_sale_policy`
 - 订单和物流工具在服务端使用当前 `X-User-Id` 校验归属，不接受模型传入用户身份
-- 限制每轮工具调用数量；未知工具、超时或模型错误不会执行写操作，并会降级为现有客服流程
+- 订单号、商品关键词和无参数规则工具均执行严格参数校验；模型传入的 `userId` 只被忽略，不参与权限判断
+- 限制每轮工具调用数量；未知工具、超时、非法 JSON 或模型错误不会执行写操作，并会降级为现有客服流程
+- 历史消息和工具结果标记为不可信数据，提示词注入不能改变工具白名单或用户权限；每次工具调用记录用户、工具、结果和耗时
 - 模型 API 调用不占用数据库写事务
 - 启用后，最近会话消息以及必要的查询结果会发送给所配置的模型服务商；默认关闭时不会发送对话内容
 
@@ -34,6 +36,13 @@ $env:XINGHE_AGENT_MODEL = "gpt-4o-mini"
 ```
 
 `XINGHE_AGENT_BASE_URL` 和 `XINGHE_AGENT_MODEL` 可按所用的 OpenAI-compatible 服务商调整。停用时将 `XINGHE_AGENT_ENABLED` 设为 `false` 或删除该变量。
+
+阶段 B 验收测试覆盖：五工具白名单、正常订单和物流查询、伪造用户身份、未知工具、非法订单参数、售后规则查询、提示词注入隔离、非法 JSON、模型超时和工具调用日志。
+
+```bash
+cd hd
+mvn -s maven-settings.xml test
+```
 
 ## 初始化数据库
 
