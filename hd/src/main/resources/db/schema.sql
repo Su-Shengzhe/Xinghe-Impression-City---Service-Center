@@ -1,3 +1,6 @@
+-- 开发环境初始化脚本：应用启动时由 spring.sql.init 执行。
+-- 本脚本不负责已有数据库的增量迁移；开发期 schema 变更后请重建 xinghe_trade 数据库。
+
 CREATE TABLE IF NOT EXISTS customer_service_session (
     session_id VARCHAR(64) PRIMARY KEY,
     user_id VARCHAR(64) NOT NULL,
@@ -34,9 +37,39 @@ CREATE TABLE IF NOT EXISTS product (
     KEY idx_product_status_name (status, name)
 );
 
+CREATE TABLE IF NOT EXISTS store (
+    id BIGINT PRIMARY KEY,
+    name VARCHAR(120) NOT NULL,
+    status VARCHAR(24) NOT NULL DEFAULT 'OPEN',
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS product_inventory (
+    sku_id BIGINT PRIMARY KEY,
+    available_quantity INT NOT NULL DEFAULT 0,
+    locked_quantity INT NOT NULL DEFAULT 0,
+    updated_at DATETIME NOT NULL,
+    CONSTRAINT fk_inventory_product FOREIGN KEY (sku_id) REFERENCES product(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS cart_item (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id VARCHAR(64) NOT NULL,
+    sku_id BIGINT NOT NULL,
+    quantity INT NOT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uk_cart_user_sku (user_id, sku_id),
+    KEY idx_cart_user_updated (user_id, updated_at),
+    CONSTRAINT fk_cart_product FOREIGN KEY (sku_id) REFERENCES product(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS trade_order (
     order_no VARCHAR(64) PRIMARY KEY,
+    parent_order_no VARCHAR(64),
     user_id VARCHAR(64) NOT NULL,
+    store_id BIGINT,
     sku_id BIGINT NOT NULL,
     quantity INT NOT NULL,
     amount DECIMAL(12,2) NOT NULL,
@@ -44,7 +77,9 @@ CREATE TABLE IF NOT EXISTS trade_order (
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
     KEY idx_trade_order_user_created (user_id, created_at),
-    KEY idx_trade_order_status (status, created_at)
+    KEY idx_trade_order_status (status, created_at),
+    KEY idx_trade_order_parent (parent_order_no),
+    KEY idx_trade_order_store (store_id)
 );
 
 CREATE TABLE IF NOT EXISTS trade_order_item (

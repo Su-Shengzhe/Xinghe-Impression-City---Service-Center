@@ -10,7 +10,9 @@ import java.time.LocalDateTime;
 public class TradeOrder {
     @TableId
     private String orderNo;
+    private String parentOrderNo;
     private String userId;
+    private Long storeId;
     private Long skuId;
     private Integer quantity;
     private BigDecimal amount;
@@ -20,8 +22,12 @@ public class TradeOrder {
 
     public String getOrderNo() { return orderNo; }
     public void setOrderNo(String orderNo) { this.orderNo = orderNo; }
+    public String getParentOrderNo() { return parentOrderNo; }
+    public void setParentOrderNo(String parentOrderNo) { this.parentOrderNo = parentOrderNo; }
     public String getUserId() { return userId; }
     public void setUserId(String userId) { this.userId = userId; }
+    public Long getStoreId() { return storeId; }
+    public void setStoreId(Long storeId) { this.storeId = storeId; }
     public Long getSkuId() { return skuId; }
     public void setSkuId(Long skuId) { this.skuId = skuId; }
     public Integer getQuantity() { return quantity; }
