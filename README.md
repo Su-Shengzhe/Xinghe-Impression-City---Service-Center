@@ -111,6 +111,29 @@ XH2026100300000001
 GET /api/customer-service/products?keyword=鞋
 ```
 
+购物车（所有接口都使用 `X-User-Id` 隔离当前用户）：
+
+```http
+GET /api/cart
+
+POST /api/cart/items
+X-User-Id: user-1001
+Content-Type: application/json
+
+{"skuId":10001,"quantity":2}
+
+PUT /api/cart/items/{skuId}
+X-User-Id: user-1001
+Content-Type: application/json
+
+{"quantity":1}
+
+DELETE /api/cart/items/{skuId}
+X-User-Id: user-1001
+```
+
+添加购物车时由服务端校验商品存在且在售，价格从商品表读取；同一用户重复添加同一 SKU 会原子累加数量。
+
 ## 前端联调
 
 前端位于 `qd`，后端位于 `hd`。前端需要 Node.js 18 或更高版本。先启动后端及所需依赖，再在 `qd` 目录运行：
