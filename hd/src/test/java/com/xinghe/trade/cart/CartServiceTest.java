@@ -14,6 +14,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class CartServiceTest {
+    /** 验证添加数量并使用商品服务端价格计算行金额。 */
     @Test
     void addsQuantityForCurrentUserAndReturnsServerProductPrice() {
         CartItemMapper cartMapper = mock(CartItemMapper.class);
@@ -33,6 +34,7 @@ class CartServiceTest {
         assertThat(result.lineAmount()).isEqualByComparingTo("398.00");
     }
 
+    /** 验证下架商品不会写入购物车。 */
     @Test
     void rejectsOffSaleProductBeforeChangingCart() {
         CartItemMapper cartMapper = mock(CartItemMapper.class);
@@ -47,6 +49,7 @@ class CartServiceTest {
         verifyNoInteractions(cartMapper);
     }
 
+    /** 验证无效数量在访问商品和购物车数据前被拒绝。 */
     @Test
     void rejectsInvalidQuantityBeforeChangingCart() {
         CartItemMapper cartMapper = mock(CartItemMapper.class);
@@ -59,6 +62,7 @@ class CartServiceTest {
         verifyNoInteractions(productMapper, cartMapper);
     }
 
+    /** 验证查询结果仅由当前用户购物车记录及商品数据组成。 */
     @Test
     void listsOnlyItemsReturnedForCurrentUserAndUsesProductData() {
         CartItemMapper cartMapper = mock(CartItemMapper.class);
@@ -78,6 +82,7 @@ class CartServiceTest {
         verify(cartMapper).selectList(any(LambdaQueryWrapper.class));
     }
 
+    /** 验证不存在的购物车商品不能被改量。 */
     @Test
     void doesNotAllowUpdatingMissingItem() {
         CartItemMapper cartMapper = mock(CartItemMapper.class);
@@ -92,6 +97,7 @@ class CartServiceTest {
                 .hasMessage("购物车中不存在该商品");
     }
 
+    /** 构造测试使用的商品数据。 */
     private Product product(String status, String price) {
         Product product = new Product();
         product.setId(10001L);
@@ -102,6 +108,7 @@ class CartServiceTest {
         return product;
     }
 
+    /** 构造测试使用的购物车记录。 */
     private CartItem item(String userId, Long skuId, int quantity) {
         CartItem item = new CartItem();
         item.setUserId(userId);

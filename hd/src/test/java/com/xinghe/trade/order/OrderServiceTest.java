@@ -2,19 +2,214 @@ package com.xinghe.trade.order;
 
 import com.xinghe.trade.product.Product;
 import com.xinghe.trade.product.ProductMapper;
+import com.xinghe.trade.cart.CartItem;
+import com.xinghe.trade.cart.CartItemMapper;
+import com.xinghe.trade.inventory.ProductInventoryMapper;
+import com.xinghe.trade.inventory.ProductInventory;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import java.time.Duration;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class OrderServiceTest {
+    @Test
+    void checksOutCartUsingServerPriceAndLocksDatabaseInventory() {
+        CartItemMapper cartMapper = mock(CartItemMapper.class);
+        ProductInventoryMapper inventoryMapper = mock(ProductInventoryMapper.class);
+        TradeOrderMapper orderMapper = mock(TradeOrderMapper.class);
+        TradeOrderItemMapper itemMapper = mock(TradeOrderItemMapper.class);
+        ProductMapper productMapper = mock(ProductMapper.class);
+        CartItem cartItem = new CartItem();
+        cartItem.setId(1L);
+        cartItem.setUserId("user-1");
+        cartItem.setSkuId(10001L);
+        cartItem.setQuantity(2);
+        when(cartMapper.selectForCheckout("user-1")).thenReturn(List.of(cartItem));
+        when(productMapper.selectById(10001L)).thenReturn(product("ON_SALE", "199.00"));
+        when(orderMapper.updateById(any(TradeOrder.class))).thenReturn(1);
+        when(inventoryMapper.lockAvailable(10001L, 2)).thenReturn(1);
+        when(orderMapper.insert(any(TradeOrder.class))).thenReturn(1);
+        when(orderMapper.updateById(any(TradeOrder.class))).thenReturn(1);
+        when(itemMapper.insert(any(TradeOrderItem.class))).thenReturn(1);
+        RedisTemplate<String, Object> redis = mock(RedisTemplate.class);
+        ValueOperations<String, Object> values = mock(ValueOperations.class);
+        when(redis.opsForValue()).thenReturn(values);
+        when(values.setIfAbsent(anyString(), eq("PROCESSING"), any(Duration.class))).thenReturn(true);
+        when(cartMapper.deleteSnapshot(eq("user-1"), anyList())).thenReturn(1);
+        OrderService service = new OrderService(redis, mock(RabbitTemplate.class),
+                orderMapper, itemMapper, productMapper, cartMapper, inventoryMapper);
+
+        List<OrderService.OrderResult> results = service.checkout(" user-1 ");
+
+        assertThat(results).hasSize(2);
+        assertThat(results.get(0).status()).isEqualTo("PENDING_PAYMENT");
+        assertThat(results.get(1).status()).isEqualTo("PENDING_PAYMENT");
+        verify(orderMapper).insert(org.mockito.ArgumentMatchers.<TradeOrder>argThat(order -> order.getUserId().equals("user-1") &&
+                order.getSkuId() == null && order.getAmount().compareTo(new BigDecimal("398.00")) == 0 &&
+                order.getParentOrderNo() == null));
+        verify(orderMapper).insert(org.mockito.ArgumentMatchers.<TradeOrder>argThat(order -> Long.valueOf(1L).equals(order.getStoreId()) &&
+                order.getAmount().compareTo(new BigDecimal("398.00")) == 0 && order.getParentOrderNo() != null));
+        verify(itemMapper).insert(org.mockito.ArgumentMatchers.<TradeOrderItem>argThat(item -> item.getQuantity() == 2 &&
+                item.getUnitPrice().compareTo(new BigDecimal("199.00")) == 0));
+        verify(cartMapper).deleteSnapshot("user-1", List.of(1L));
+    }
+
+    @Test
+    void doesNotClearCartWhenInventoryCannotBeLocked() {
+        CartItemMapper cartMapper = mock(CartItemMapper.class);
+        ProductInventoryMapper inventoryMapper = mock(ProductInventoryMapper.class);
+        CartItem cartItem = new CartItem();
+        cartItem.setId(2L);
+        cartItem.setSkuId(10001L);
+        cartItem.setQuantity(1);
+        when(cartMapper.selectForCheckout("user-1")).thenReturn(List.of(cartItem));
+        ProductMapper productMapper = mock(ProductMapper.class);
+        when(productMapper.selectById(10001L)).thenReturn(product("ON_SALE", "199.00"));
+        when(inventoryMapper.lockAvailable(10001L, 1)).thenReturn(0);
+        TradeOrderMapper orderMapper = mock(TradeOrderMapper.class);
+        when(orderMapper.insert(any(TradeOrder.class))).thenReturn(1);
+        RedisTemplate<String, Object> redis = mock(RedisTemplate.class);
+        ValueOperations<String, Object> values = mock(ValueOperations.class);
+        when(redis.opsForValue()).thenReturn(values);
+        when(values.setIfAbsent(anyString(), eq("PROCESSING"), any(Duration.class))).thenReturn(true);
+        OrderService service = new OrderService(redis, mock(RabbitTemplate.class),
+                orderMapper, mock(TradeOrderItemMapper.class), productMapper,
+                cartMapper, inventoryMapper);
+
+        assertThatThrownBy(() -> service.checkout("user-1"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("商品库存不足");
+        verify(cartMapper, never()).deleteSnapshot(anyString(), anyList());
+    }
+
+    /** 确认同店多个 SKU 聚合为一个子单，不同店铺分别生成子单。 */
+    @Test
+    void groupsCheckoutItemsIntoOneChildOrderPerStore() {
+        CartItemMapper cartMapper = mock(CartItemMapper.class);
+        ProductInventoryMapper inventoryMapper = mock(ProductInventoryMapper.class);
+        TradeOrderMapper orderMapper = mock(TradeOrderMapper.class);
+        TradeOrderItemMapper itemMapper = mock(TradeOrderItemMapper.class);
+        ProductMapper productMapper = mock(ProductMapper.class);
+        CartItem first = cartItem(101L, 1);
+        CartItem second = cartItem(102L, 2);
+        CartItem third = cartItem(201L, 3);
+        first.setId(1L);
+        second.setId(2L);
+        third.setId(3L);
+        when(cartMapper.selectForCheckout("user-1")).thenReturn(List.of(first, second, third));
+        when(productMapper.selectById(101L)).thenReturn(product(101L, 1L, "10.00"));
+        when(productMapper.selectById(102L)).thenReturn(product(102L, 1L, "5.00"));
+        when(productMapper.selectById(201L)).thenReturn(product(201L, 2L, "2.00"));
+        when(inventoryMapper.lockAvailable(anyLong(), anyInt())).thenReturn(1);
+        when(orderMapper.insert(any(TradeOrder.class))).thenReturn(1);
+        when(orderMapper.updateById(any(TradeOrder.class))).thenReturn(1);
+        when(itemMapper.insert(any(TradeOrderItem.class))).thenReturn(1);
+        RedisTemplate<String, Object> redis = mock(RedisTemplate.class);
+        ValueOperations<String, Object> values = mock(ValueOperations.class);
+        when(redis.opsForValue()).thenReturn(values);
+        when(values.setIfAbsent(anyString(), eq("PROCESSING"), any(Duration.class))).thenReturn(true);
+        when(cartMapper.deleteSnapshot(eq("user-1"), anyList())).thenReturn(3);
+
+        OrderService service = new OrderService(redis, mock(RabbitTemplate.class),
+                orderMapper, itemMapper, productMapper, cartMapper, inventoryMapper);
+        List<OrderService.OrderResult> results = service.checkout("user-1");
+
+        assertThat(results).hasSize(3);
+        verify(orderMapper, times(1)).insert(org.mockito.ArgumentMatchers.<TradeOrder>argThat(order ->
+                order.getParentOrderNo() == null && order.getSkuId() == null &&
+                        order.getAmount().compareTo(new BigDecimal("26.00")) == 0));
+        verify(orderMapper, times(1)).insert(org.mockito.ArgumentMatchers.<TradeOrder>argThat(order ->
+                Long.valueOf(1L).equals(order.getStoreId()) && order.getParentOrderNo() != null));
+        verify(orderMapper, times(1)).insert(org.mockito.ArgumentMatchers.<TradeOrder>argThat(order ->
+                Long.valueOf(2L).equals(order.getStoreId()) && order.getParentOrderNo() != null));
+        verify(itemMapper, times(3)).insert(any(TradeOrderItem.class));
+    }
+
+    @Test
+    void replaysCompletedCheckoutForSameTokenWithoutCreatingAnotherOrder() {
+        CartItemMapper cartMapper = mock(CartItemMapper.class);
+        ProductInventoryMapper inventoryMapper = mock(ProductInventoryMapper.class);
+        TradeOrderMapper orderMapper = mock(TradeOrderMapper.class);
+        TradeOrderItemMapper itemMapper = mock(TradeOrderItemMapper.class);
+        ProductMapper productMapper = mock(ProductMapper.class);
+        CartItem cartItem = cartItem(10001L, 1);
+        cartItem.setId(9L);
+        when(cartMapper.selectForCheckout("user-1")).thenReturn(List.of(cartItem));
+        when(productMapper.selectById(10001L)).thenReturn(product("ON_SALE", "199.00"));
+        when(inventoryMapper.lockAvailable(10001L, 1)).thenReturn(1);
+        when(orderMapper.insert(any(TradeOrder.class))).thenReturn(1);
+        when(orderMapper.updateById(any(TradeOrder.class))).thenReturn(1);
+        when(itemMapper.insert(any(TradeOrderItem.class))).thenReturn(1);
+        TradeOrder parent = new TradeOrder();
+        parent.setOrderNo("PARENT-REPLAY");
+        parent.setUserId("user-1");
+        parent.setStatus("PENDING_PAYMENT");
+        when(orderMapper.selectById("PARENT-REPLAY")).thenReturn(parent);
+        when(orderMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of());
+
+        RedisTemplate<String, Object> redis = mock(RedisTemplate.class);
+        ValueOperations<String, Object> values = mock(ValueOperations.class);
+        when(redis.opsForValue()).thenReturn(values);
+        when(values.setIfAbsent(anyString(), eq("PROCESSING"), any(Duration.class)))
+                .thenReturn(true, false);
+        when(values.get(anyString())).thenReturn("PARENT-REPLAY");
+        when(cartMapper.deleteSnapshot(eq("user-1"), anyList())).thenReturn(1);
+
+        OrderService service = new OrderService(redis, mock(RabbitTemplate.class), orderMapper, itemMapper,
+                productMapper, cartMapper, inventoryMapper);
+
+        service.checkout("user-1", "checkout-replay");
+        List<OrderService.OrderResult> replay = service.checkout("user-1", "checkout-replay");
+
+        assertThat(replay).containsExactly(new OrderService.OrderResult("PARENT-REPLAY", "PENDING_PAYMENT"));
+        verify(orderMapper, times(2)).insert(any(TradeOrder.class));
+        verify(cartMapper, times(1)).selectForCheckout("user-1");
+    }
+
+    /** 确认取消父订单时每个子订单明细只释放对应 SKU 的锁定库存。 */
+    @Test
+    void cancellingParentOrderCancelsChildrenAndReleasesEachSku() {
+        TradeOrder parent = new TradeOrder();
+        parent.setOrderNo("PARENT-1");
+        parent.setUserId("user-1");
+        parent.setStatus("PENDING_PAYMENT");
+        TradeOrder child = new TradeOrder();
+        child.setOrderNo("CHILD-1");
+        child.setParentOrderNo("PARENT-1");
+        child.setStatus("PENDING_PAYMENT");
+        TradeOrderItem item = new TradeOrderItem();
+        item.setOrderNo("CHILD-1");
+        item.setSkuId(101L);
+        item.setQuantity(2);
+
+        TradeOrderMapper orders = mock(TradeOrderMapper.class);
+        TradeOrderItemMapper items = mock(TradeOrderItemMapper.class);
+        ProductInventoryMapper inventory = mock(ProductInventoryMapper.class);
+        when(orders.selectById("PARENT-1")).thenReturn(parent);
+        when(orders.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(child));
+        when(orders.update(any(TradeOrder.class), any())).thenReturn(1);
+        when(items.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(item));
+        when(inventory.releaseLocked(101L, 2)).thenReturn(1);
+
+        OrderService service = new OrderService(mock(RedisTemplate.class), mock(RabbitTemplate.class),
+                orders, items, mock(ProductMapper.class), mock(CartItemMapper.class), inventory);
+        service.cancel("user-1", "PARENT-1");
+
+        verify(orders).update(any(TradeOrder.class), any());
+        verify(inventory).releaseLocked(101L, 2);
+    }
+
     @Test
     void rejectsClientTamperedAmountBeforeReservingStock() {
         RedisTemplate<String, Object> redis = mock(RedisTemplate.class);
@@ -99,10 +294,31 @@ class OrderServiceTest {
     }
 
     private Product product(String status, String price) {
+        return product(10001L, 1L, status, price);
+    }
+
+    /** 构造结算测试用的店铺商品快照。 */
+    private Product product(Long skuId, Long storeId, String price) {
+        return product(skuId, storeId, "ON_SALE", price);
+    }
+
+    /** 构造指定状态、店铺和价格的商品数据。 */
+    private Product product(Long skuId, Long storeId, String status, String price) {
         Product product = new Product();
-        product.setId(10001L);
+        product.setId(skuId);
+        product.setStoreId(storeId);
         product.setPrice(new BigDecimal(price));
         product.setStatus(status);
+        product.setName("测试商品");
         return product;
+    }
+
+    /** 构造结算测试中的购物车行。 */
+    private CartItem cartItem(Long skuId, int quantity) {
+        CartItem item = new CartItem();
+        item.setUserId("user-1");
+        item.setSkuId(skuId);
+        item.setQuantity(quantity);
+        return item;
     }
 }

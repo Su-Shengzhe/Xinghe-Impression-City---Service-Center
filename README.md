@@ -134,6 +134,36 @@ X-User-Id: user-1001
 
 添加购物车时由服务端校验商品存在且在售，价格从商品表读取；同一用户重复添加同一 SKU 会原子累加数量。
 
+购物车结算：
+
+```http
+POST /api/orders/checkout
+X-User-Id: user-1001
+```
+
+结算会返回一个父订单编号及按店铺拆分的子订单编号；父订单保存总金额，子订单保存店铺金额和订单商品价格快照。订单查询、取消及店铺发货接口如下：
+
+```http
+GET  /api/orders/{orderNo}              X-User-Id: user-1001
+POST /api/orders/{orderNo}/cancel       X-User-Id: user-1001
+POST /api/orders/{childOrderNo}/ship    X-Store-Id: 1
+```
+
+发货请求体包含 `company` 和 `trackingNo`。父单取消会取消所有待支付子单并释放其锁定库存；已支付子单发货后进入 `SHIPPED`，物流记录可通过客服物流查询接口查看。
+
+店铺商品维护接口使用 `X-Store-Id` 做联调期归属检查：
+
+```http
+POST /api/store/products
+PUT  /api/store/products/{skuId}
+PUT  /api/store/products/{skuId}/status
+PUT  /api/store/products/{skuId}/inventory
+```
+
+创建请求需要 `skuId`、`name`、`price`、`availableQuantity`，编辑仅更新商品资料，上下架状态为 `ON_SALE` / `OFF_SALE`；库存接口只调整可用量，不覆盖待支付订单锁定的库存。
+
+结算不接收客户端价格或用户 ID。服务端按当前商品价格和数据库可用库存创建待支付订单，成功后清空该用户购物车；一次结算为每个 SKU 创建一笔订单，返回订单号与状态列表。启用 RabbitMQ 订单超时处理后，未支付订单超时会释放数据库锁定库存。
+
 ## 前端联调
 
 前端位于 `qd`，后端位于 `hd`。前端需要 Node.js 18 或更高版本。先启动后端及所需依赖，再在 `qd` 目录运行：

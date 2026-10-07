@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class CartControllerTest {
+    /** 验证控制器从请求头读取用户标识，且请求体不提供用户身份。 */
     @Test
     void passesHeaderUserToServiceAndNeverAcceptsUserFromRequestBody() {
         CartService service = mock(CartService.class);
@@ -21,6 +22,7 @@ class CartControllerTest {
         assertThat(response.data()).isEqualTo(line);
     }
 
+    /** 验证删除请求将请求头用户与路径 SKU 传递给服务层。 */
     @Test
     void removesUsingPathSkuAndCurrentHeaderUser() {
         CartService service = mock(CartService.class);

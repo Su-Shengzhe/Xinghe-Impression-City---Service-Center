@@ -6,18 +6,29 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/** 映射交易订单记录及其商品、金额和状态快照。 */
 @TableName("trade_order")
 public class TradeOrder {
+    /** 订单唯一编号。 */
     @TableId
     private String orderNo;
+    /** 多店铺场景下关联的父订单编号；独立订单可为空。 */
     private String parentOrderNo;
+    /** 下单用户标识。 */
     private String userId;
+    /** 此订单所属店铺。 */
     private Long storeId;
+    /** 订单对应的商品 SKU。 */
     private Long skuId;
+    /** 下单商品数量。 */
     private Integer quantity;
+    /** 下单时记录的订单金额。 */
     private BigDecimal amount;
+    /** 订单当前业务状态。 */
     private String status;
+    /** 订单创建时间。 */
     private LocalDateTime createdAt;
+    /** 订单最近更新时间。 */
     private LocalDateTime updatedAt;
 
     public String getOrderNo() { return orderNo; }

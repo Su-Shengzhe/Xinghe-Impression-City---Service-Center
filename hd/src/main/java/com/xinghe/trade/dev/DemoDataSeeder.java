@@ -9,6 +9,8 @@ import com.xinghe.trade.order.TradeOrderItemMapper;
 import com.xinghe.trade.order.TradeOrderMapper;
 import com.xinghe.trade.product.Product;
 import com.xinghe.trade.product.ProductMapper;
+import com.xinghe.trade.inventory.ProductInventory;
+import com.xinghe.trade.inventory.ProductInventoryMapper;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -28,17 +30,20 @@ public class DemoDataSeeder implements CommandLineRunner {
     private final TradeOrderItemMapper orderItemMapper;
     private final LogisticsMapper logisticsMapper;
     private final RedisTemplate<String, Object> redis;
+    private final ProductInventoryMapper inventoryMapper;
 
     public DemoDataSeeder(ProductMapper productMapper,
                           TradeOrderMapper orderMapper,
                           TradeOrderItemMapper orderItemMapper,
                           LogisticsMapper logisticsMapper,
-                          RedisTemplate<String, Object> redis) {
+                          RedisTemplate<String, Object> redis,
+                          ProductInventoryMapper inventoryMapper) {
         this.productMapper = productMapper;
         this.orderMapper = orderMapper;
         this.orderItemMapper = orderItemMapper;
         this.logisticsMapper = logisticsMapper;
         this.redis = redis;
+        this.inventoryMapper = inventoryMapper;
     }
 
     @Override
@@ -64,6 +69,14 @@ public class DemoDataSeeder implements CommandLineRunner {
             productMapper.insert(product);
         }
         redis.opsForValue().setIfAbsent("stock:sku:" + DEMO_PRODUCT_ID, "20");
+        if (inventoryMapper.selectById(DEMO_PRODUCT_ID) == null) {
+            ProductInventory inventory = new ProductInventory();
+            inventory.setSkuId(DEMO_PRODUCT_ID);
+            inventory.setAvailableQuantity(20);
+            inventory.setLockedQuantity(0);
+            inventory.setUpdatedAt(now);
+            inventoryMapper.insert(inventory);
+        }
 
         TradeOrder order = orderMapper.selectById(DEMO_ORDER_NO);
         if (order == null) {

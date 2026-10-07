@@ -4,12 +4,25 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class OrderControllerTest {
+    @Test
+    void checkoutUsesNormalizedHeaderIdentityOnly() {
+        OrderService service = mock(OrderService.class);
+        when(service.checkout("user-1", "checkout-1"))
+                .thenReturn(List.of(new OrderService.OrderResult("XH12345678", "PENDING_PAYMENT")));
+        OrderController controller = new OrderController(service);
+
+        controller.checkout(" user-1 ", "checkout-1");
+
+        verify(service).checkout("user-1", "checkout-1");
+    }
+
     @Test
     void normalizesBodyUserIdBeforePassingOrderToService() {
         OrderService service = mock(OrderService.class);

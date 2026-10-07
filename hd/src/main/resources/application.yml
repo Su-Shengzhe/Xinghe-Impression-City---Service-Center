@@ -5,7 +5,8 @@ spring:
       - optional:file:../.env[.properties]
   sql:
     init:
-      mode: always
+      # Schema creation is an explicit development operation; production uses migrations.
+      mode: ${SPRING_SQL_INIT_MODE:never}
       schema-locations: classpath:db/schema.sql
   application:
     name: xinghe-trade-center

@@ -1,5 +1,5 @@
--- 开发环境初始化脚本：应用启动时由 spring.sql.init 执行。
--- 本脚本不负责已有数据库的增量迁移；开发期 schema 变更后请重建 xinghe_trade 数据库。
+-- 开发环境初始化脚本：仅在显式设置 SPRING_SQL_INIT_MODE=always 时由 spring.sql.init 执行。
+-- 本脚本不负责已有数据库的增量迁移；生产环境请使用版本化数据库迁移工具。
 
 CREATE TABLE IF NOT EXISTS customer_service_session (
     session_id VARCHAR(64) PRIMARY KEY,
@@ -56,8 +56,9 @@ CREATE TABLE IF NOT EXISTS product_inventory (
 CREATE TABLE IF NOT EXISTS cart_item (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     user_id VARCHAR(64) NOT NULL,
-    sku_id BIGINT NOT NULL,
-    quantity INT NOT NULL,
+    -- 父订单只汇总金额与状态，不绑定单一 SKU；SKU 和数量保存在店铺子订单明细。
+    sku_id BIGINT,
+    quantity INT,
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
     UNIQUE KEY uk_cart_user_sku (user_id, sku_id),
@@ -70,8 +71,9 @@ CREATE TABLE IF NOT EXISTS trade_order (
     parent_order_no VARCHAR(64),
     user_id VARCHAR(64) NOT NULL,
     store_id BIGINT,
-    sku_id BIGINT NOT NULL,
-    quantity INT NOT NULL,
+    -- 父订单仅保存汇总金额和状态，SKU 与数量由店铺子订单明细承载。
+    sku_id BIGINT,
+    quantity INT,
     amount DECIMAL(12,2) NOT NULL,
     status VARCHAR(32) NOT NULL,
     created_at DATETIME NOT NULL,
