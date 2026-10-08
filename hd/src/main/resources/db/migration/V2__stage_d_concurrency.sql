@@ -1,0 +1,2 @@
+ALTER TABLE product_inventory ADD COLUMN version BIGINT NOT NULL DEFAULT 0, ADD COLUMN sold_quantity INT NOT NULL DEFAULT 0;
+CREATE TABLE payment_idempotency (token VARCHAR(128) PRIMARY KEY, order_no VARCHAR(64) NOT NULL, user_id VARCHAR(64) NOT NULL, status VARCHAR(24) NOT NULL, result_status VARCHAR(32), error_message VARCHAR(255), created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, KEY idx_payment_idempotency_order (order_no));

@@ -49,6 +49,8 @@ CREATE TABLE IF NOT EXISTS product_inventory (
     sku_id BIGINT PRIMARY KEY,
     available_quantity INT NOT NULL DEFAULT 0,
     locked_quantity INT NOT NULL DEFAULT 0,
+    version BIGINT NOT NULL DEFAULT 0,
+    sold_quantity INT NOT NULL DEFAULT 0,
     updated_at DATETIME NOT NULL,
     CONSTRAINT fk_inventory_product FOREIGN KEY (sku_id) REFERENCES product(id) ON DELETE CASCADE
 );

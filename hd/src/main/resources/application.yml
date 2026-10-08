@@ -5,9 +5,13 @@ spring:
       - optional:file:../.env[.properties]
   sql:
     init:
-      # Schema creation is an explicit development operation; production uses migrations.
-      mode: ${SPRING_SQL_INIT_MODE:never}
-      schema-locations: classpath:db/schema.sql
+      # Flyway is the sole schema owner. schema.sql remains only as a historical reference.
+      mode: never
+  flyway:
+    enabled: ${SPRING_FLYWAY_ENABLED:true}
+    locations: classpath:db/migration
+    baseline-on-migrate: ${SPRING_FLYWAY_BASELINE_ON_MIGRATE:true}
+    baseline-version: 1
   application:
     name: xinghe-trade-center
   datasource:

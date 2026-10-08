@@ -3,6 +3,7 @@ package com.xinghe.trade.order;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.xinghe.trade.inventory.ProductInventoryMapper;
+import com.xinghe.trade.inventory.ProductInventory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -48,6 +49,9 @@ public class OrderTimeoutConsumer {
     public void cancel(String orderNo) {
         TradeOrder order = orderMapper.selectById(orderNo);
         if (order == null) return;
+        String parentOrderNo = order.getParentOrderNo() == null ? orderNo : order.getParentOrderNo();
+        TradeOrder lockedParent = orderMapper.selectForUpdate(parentOrderNo);
+        if (lockedParent != null) order = order.getParentOrderNo() == null ? lockedParent : order;
         if (order.getParentOrderNo() == null && order.getSkuId() == null) {
             List<TradeOrder> children = orderMapper.selectList(new LambdaQueryWrapper<TradeOrder>()
                     .eq(TradeOrder::getParentOrderNo, orderNo));
@@ -79,9 +83,23 @@ public class OrderTimeoutConsumer {
     }
 
     private void release(Long skuId, Integer quantity) {
-        if (inventoryMapper == null || inventoryMapper.releaseLocked(skuId, quantity) != 1) {
+        if (inventoryMapper == null) {
             throw new IllegalStateException("锁定库存状态异常");
         }
+        for (int attempt = 0; attempt < 5; attempt++) {
+            ProductInventory inventory = inventoryMapper.selectInventory(skuId);
+            // 兼容旧的调用方测试；生产库由 Flyway 保证库存行存在并走版本条件更新。
+            if (inventory == null) {
+                if (inventoryMapper.releaseLocked(skuId, quantity) == 1) return;
+                throw new IllegalStateException("锁定库存状态异常");
+            }
+            long version = inventory.getVersion() == null ? 0L : inventory.getVersion();
+            if (inventory.getLockedQuantity() == null || inventory.getLockedQuantity() < quantity) {
+                throw new IllegalStateException("锁定库存状态异常");
+            }
+            if (inventoryMapper.releaseLocked(skuId, quantity, version) == 1) return;
+        }
+        throw new IllegalStateException("库存并发冲突，请稍后重试");
     }
 
     /** 所有子订单终态后按统一规则刷新父订单，避免超时路径覆盖发货状态。 */

@@ -74,6 +74,8 @@ public class DemoDataSeeder implements CommandLineRunner {
             inventory.setSkuId(DEMO_PRODUCT_ID);
             inventory.setAvailableQuantity(20);
             inventory.setLockedQuantity(0);
+            inventory.setVersion(0L);
+            inventory.setSoldQuantity(0);
             inventory.setUpdatedAt(now);
             inventoryMapper.insert(inventory);
         }

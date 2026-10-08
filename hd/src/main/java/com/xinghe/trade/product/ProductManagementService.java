@@ -1,7 +1,6 @@
 package com.xinghe.trade.product;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.xinghe.trade.inventory.ProductInventory;
 import com.xinghe.trade.inventory.ProductInventoryMapper;
 import com.xinghe.trade.store.Store;
@@ -46,6 +45,8 @@ public class ProductManagementService {
         inventory.setSkuId(product.getId());
         inventory.setAvailableQuantity(request.availableQuantity());
         inventory.setLockedQuantity(0);
+        inventory.setVersion(0L);
+        inventory.setSoldQuantity(0);
         inventory.setUpdatedAt(LocalDateTime.now());
         if (inventoryMapper.insert(inventory) != 1) throw new IllegalStateException("商品库存初始化失败");
         return product;
@@ -82,12 +83,15 @@ public class ProductManagementService {
     public ProductInventory setInventory(Long storeId, Long skuId, Integer availableQuantity) {
         requireOwnedProduct(storeId, skuId);
         if (availableQuantity == null || availableQuantity < 0) throw new IllegalArgumentException("可用库存不能为负数");
-        int updated = inventoryMapper.update(null, new UpdateWrapper<ProductInventory>()
-                .eq("sku_id", skuId)
-                .set("available_quantity", availableQuantity)
-                .set("updated_at", LocalDateTime.now()));
-        if (updated != 1) throw new IllegalStateException("商品库存记录不存在");
-        return inventoryMapper.selectById(skuId);
+        for (int attempt = 0; attempt < 5; attempt++) {
+            ProductInventory inventory = inventoryMapper.selectInventory(skuId);
+            if (inventory == null) throw new IllegalStateException("商品库存记录不存在");
+            long version = inventory.getVersion() == null ? 0L : inventory.getVersion();
+            if (inventoryMapper.updateAvailable(skuId, availableQuantity, version) == 1) {
+                return inventoryMapper.selectById(skuId);
+            }
+        }
+        throw new IllegalStateException("库存并发冲突，请稍后重试");
     }
 
     /** 校验店铺有效，避免商品被创建到不存在或停业店铺。 */

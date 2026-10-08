@@ -46,7 +46,22 @@ mvn -s maven-settings.xml test
 
 ## 初始化数据库
 
-应用启动时会自动执行 `hd/src/main/resources/db/schema.sql`，创建客服、商品、订单和物流表。请先创建 MySQL 数据库 `xinghe_trade`，再启动后端。
+数据库由 Flyway 版本迁移唯一管理，应用启动不会再执行 `schema.sql`。新环境执行 `hd/src/main/resources/db/migration/V1__baseline_schema.sql` 和 `V2__stage_d_concurrency.sql`；已有阶段 C 数据库在 `SPRING_FLYWAY_BASELINE_ON_MIGRATE=true` 下会以版本 1 建基线后执行版本 2。不要同时启用 `schema.sql` 和 Flyway。
+
+阶段 D 的库存写操作使用 MySQL `product_inventory.version` 条件更新，库存总量由 `available_quantity + locked_quantity + sold_quantity` 校验。支付幂等记录保存在 `payment_idempotency`，Redis 不参与最终库存扣减或支付幂等。
+
+阶段 D 默认测试与脚本：
+
+```powershell
+cd hd
+mvn -s maven-settings.xml test
+cd ..
+.\scripts\stage-d-concurrency.ps1 -ResetDatabase
+.\scripts\stage-d-payment-race.ps1 -OrderNo <pending-parent-order> -TokenMode same-token
+.\scripts\stage-d-payment-race.ps1 -OrderNo <pending-parent-order> -TokenMode different-token
+```
+
+并发脚本默认从 `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_DATABASE`、`MYSQL_USERNAME` 和 `MYSQL_PASSWORD` 读取数据库连接参数。`-ResetDatabase` 会删除测试订单和购物车，只应在专用测试数据库使用；每次运行会在 `stage-d-results` 保存原始响应、性能统计、提交版本和库存快照。
 
 开发环境默认可通过根目录 `.env` 中的 `XINGHE_SEED_ENABLED=true` 写入演示数据：
 
