@@ -5,6 +5,8 @@ import com.xinghe.trade.inventory.ProductInventory;
 import com.xinghe.trade.inventory.ProductInventoryMapper;
 import com.xinghe.trade.store.Store;
 import com.xinghe.trade.store.StoreMapper;
+import com.xinghe.trade.messaging.OutboxService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,13 +18,21 @@ public class ProductManagementService {
     private final ProductMapper productMapper;
     private final StoreMapper storeMapper;
     private final ProductInventoryMapper inventoryMapper;
+    private final OutboxService outbox;
 
     /** 注入商品、店铺与库存 mapper，确保管理操作遵循现有数据库模型。 */
     public ProductManagementService(ProductMapper productMapper, StoreMapper storeMapper,
                                     ProductInventoryMapper inventoryMapper) {
+        this(productMapper, storeMapper, inventoryMapper, null);
+    }
+
+    @Autowired
+    public ProductManagementService(ProductMapper productMapper, StoreMapper storeMapper,
+                                    ProductInventoryMapper inventoryMapper, OutboxService outbox) {
         this.productMapper = productMapper;
         this.storeMapper = storeMapper;
         this.inventoryMapper = inventoryMapper;
+        this.outbox = outbox;
     }
 
     /** 创建商品并初始化其可售库存；商品和库存记录在同一事务提交。 */
@@ -49,6 +59,7 @@ public class ProductManagementService {
         inventory.setSoldQuantity(0);
         inventory.setUpdatedAt(LocalDateTime.now());
         if (inventoryMapper.insert(inventory) != 1) throw new IllegalStateException("商品库存初始化失败");
+        recordIndexEvent(product.getId());
         return product;
     }
 
@@ -62,6 +73,7 @@ public class ProductManagementService {
         product.setPrice(request.price());
         product.setUpdatedAt(LocalDateTime.now());
         if (productMapper.updateById(product) != 1) throw new IllegalStateException("商品更新失败");
+        recordIndexEvent(product.getId());
         return product;
     }
 
@@ -75,6 +87,7 @@ public class ProductManagementService {
         product.setStatus(status);
         product.setUpdatedAt(LocalDateTime.now());
         if (productMapper.updateById(product) != 1) throw new IllegalStateException("商品状态更新失败");
+        recordIndexEvent(product.getId());
         return product;
     }
 
@@ -121,6 +134,10 @@ public class ProductManagementService {
         if (request == null || request.skuId() == null || request.skuId() <= 0) throw new IllegalArgumentException("商品 SKU 必须为正整数");
         if (request.name() == null || request.name().isBlank() || request.name().trim().length() > 200) throw new IllegalArgumentException("商品名称不能为空且不能超过 200 个字符");
         if (request.price() == null || request.price().signum() < 0 || request.price().scale() > 2) throw new IllegalArgumentException("商品价格必须为非负两位小数");
+    }
+
+    private void recordIndexEvent(Long skuId) {
+        if (outbox != null) outbox.record("PRODUCT_INDEX", "product.index", java.util.Map.of("skuId", skuId));
     }
 
     /** 商品资料及创建时的初始可用库存。 */

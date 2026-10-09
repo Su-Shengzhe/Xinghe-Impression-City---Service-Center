@@ -3,11 +3,35 @@ package com.xinghe.trade.order;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.RedisTemplate;
 import com.xinghe.trade.inventory.ProductInventoryMapper;
+import com.xinghe.trade.inventory.ProductInventory;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class OrderTimeoutConsumerTest {
+    @Test
+    void releasesLockedStockWithTheCurrentInventoryVersion() {
+        TradeOrderMapper orderMapper = mock(TradeOrderMapper.class);
+        TradeOrderItemMapper orderItemMapper = mock(TradeOrderItemMapper.class);
+        ProductInventoryMapper inventoryMapper = mock(ProductInventoryMapper.class);
+        TradeOrder order = pendingOrder();
+        ProductInventory inventory = new ProductInventory();
+        inventory.setSkuId(9L);
+        inventory.setLockedQuantity(2);
+        inventory.setVersion(7L);
+        when(orderMapper.selectById("XH12345678")).thenReturn(order);
+        when(orderMapper.update(any(TradeOrder.class), any())).thenReturn(1);
+        when(orderItemMapper.selectList(any())).thenReturn(java.util.List.of());
+        when(inventoryMapper.selectInventory(9L)).thenReturn(inventory);
+        when(inventoryMapper.releaseLocked(9L, 2, 7L)).thenReturn(1);
+
+        OrderTimeoutConsumer consumer = new OrderTimeoutConsumer(orderMapper, orderItemMapper, inventoryMapper);
+        consumer.cancel("XH12345678");
+
+        verify(inventoryMapper).releaseLocked(9L, 2, 7L);
+        verify(orderMapper).update(any(TradeOrder.class), any());
+    }
+
     @Test
     void restoresReservedStockOnlyWhenPendingOrderIsCancelled() {
         RedisTemplate<String, Object> redis = mock(RedisTemplate.class);

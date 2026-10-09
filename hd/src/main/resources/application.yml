@@ -22,11 +22,21 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+    elasticsearch:
+      repositories:
+        enabled: ${XINGHE_ELASTICSEARCH_ENABLED:false}
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:guest}
     password: ${RABBITMQ_PASSWORD:guest}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+    listener:
+      simple:
+        default-requeue-rejected: false
   elasticsearch:
     uris: ${ELASTICSEARCH_URI:http://localhost:9200}
 mybatis-plus:
@@ -39,6 +49,10 @@ xinghe:
     enabled: ${XINGHE_SEED_ENABLED:false}
   messaging:
     enabled: ${XINGHE_MESSAGING_ENABLED:false}
+    outbox-poll-ms: ${XINGHE_OUTBOX_POLL_MS:1000}
+  search:
+    elasticsearch:
+      enabled: ${XINGHE_ELASTICSEARCH_ENABLED:false}
   customer-service:
     agent:
       enabled: ${XINGHE_AGENT_ENABLED:false}

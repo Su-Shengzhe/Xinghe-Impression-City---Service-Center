@@ -1,7 +1,6 @@
 package com.xinghe.trade.order;
 
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
-import org.springframework.amqp.core.MessagePostProcessor;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -18,6 +17,7 @@ import com.xinghe.trade.payment.PaymentIdempotency;
 import com.xinghe.trade.payment.PaymentIdempotencyMapper;
 import com.xinghe.trade.logistics.LogisticsMapper;
 import com.xinghe.trade.logistics.LogisticsRecord;
+import com.xinghe.trade.messaging.OutboxService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 
 import java.time.LocalDateTime;
@@ -28,8 +28,6 @@ import java.util.UUID;
 import java.util.List;
 import java.util.Map;
 import java.util.LinkedHashMap;
-
-import static com.xinghe.trade.config.MessagingConfig.ORDER_EXCHANGE;
 
 /** 负责旧单笔下单、购物车结算和待支付订单的支付状态流转。 */
 @Service
@@ -43,6 +41,7 @@ public class OrderService {
     private final ProductInventoryMapper inventoryMapper;
     private final LogisticsMapper logisticsMapper;
     private final PaymentIdempotencyMapper paymentIdempotencyMapper;
+    private final OutboxService outbox;
     @Value("${xinghe.messaging.enabled:false}")
     private boolean messagingEnabled;
 
@@ -51,7 +50,7 @@ public class OrderService {
                         TradeOrderMapper orderMapper, TradeOrderItemMapper orderItemMapper,
                         ProductMapper productMapper, CartItemMapper cartItemMapper,
                         ProductInventoryMapper inventoryMapper, LogisticsMapper logisticsMapper,
-                        PaymentIdempotencyMapper paymentIdempotencyMapper) {
+                        PaymentIdempotencyMapper paymentIdempotencyMapper, OutboxService outbox) {
         this.redis = redis;
         this.rabbit = rabbit;
         this.orderMapper = orderMapper;
@@ -61,13 +60,23 @@ public class OrderService {
         this.inventoryMapper = inventoryMapper;
         this.logisticsMapper = logisticsMapper;
         this.paymentIdempotencyMapper = paymentIdempotencyMapper;
+        this.outbox = outbox;
+    }
+
+    public OrderService(RedisTemplate<String, Object> redis, RabbitTemplate rabbit,
+                        TradeOrderMapper orderMapper, TradeOrderItemMapper orderItemMapper,
+                        ProductMapper productMapper, CartItemMapper cartItemMapper,
+                        ProductInventoryMapper inventoryMapper, LogisticsMapper logisticsMapper,
+                        PaymentIdempotencyMapper paymentIdempotencyMapper) {
+        this(redis, rabbit, orderMapper, orderItemMapper, productMapper, cartItemMapper,
+                inventoryMapper, logisticsMapper, paymentIdempotencyMapper, null);
     }
 
     /** 保留旧单笔下单流程的构造方式，便于既有调用测试与集成代码兼容。 */
     public OrderService(RedisTemplate<String, Object> redis, RabbitTemplate rabbit,
                         TradeOrderMapper orderMapper, TradeOrderItemMapper orderItemMapper,
                         ProductMapper productMapper) {
-        this(redis, rabbit, orderMapper, orderItemMapper, productMapper, null, null, null, null);
+        this(redis, rabbit, orderMapper, orderItemMapper, productMapper, null, null, null, null, null);
     }
 
     /** 兼容结算测试和既有调用方使用的七依赖构造方式。 */
@@ -76,7 +85,7 @@ public class OrderService {
                         ProductMapper productMapper, CartItemMapper cartItemMapper,
                         ProductInventoryMapper inventoryMapper) {
         this(redis, rabbit, orderMapper, orderItemMapper, productMapper, cartItemMapper,
-                inventoryMapper, null, null);
+                inventoryMapper, null, null, null);
     }
 
     /** 保留阶段 C 完整构造方式；支付幂等 Mapper 缺省时仅供旧单元测试兼容。 */
@@ -85,7 +94,7 @@ public class OrderService {
                         ProductMapper productMapper, CartItemMapper cartItemMapper,
                         ProductInventoryMapper inventoryMapper, LogisticsMapper logisticsMapper) {
         this(redis, rabbit, orderMapper, orderItemMapper, productMapper, cartItemMapper,
-                inventoryMapper, logisticsMapper, null);
+                inventoryMapper, logisticsMapper, null, null);
     }
 
     /**
@@ -189,7 +198,7 @@ public class OrderService {
                 if (orderMapper.updateById(child) != 1) throw new IllegalStateException("子订单金额更新失败");
                 results.add(new OrderResult(childOrderNo, child.getStatus()));
                 if (messagingEnabled) {
-                    rabbit.convertAndSend(ORDER_EXCHANGE, "order.timeout", childOrderNo, delayed(15 * 60 * 1000L));
+                    recordTimeout(childOrderNo, 15 * 60 * 1000L);
                 }
             }
 
@@ -379,7 +388,7 @@ public class OrderService {
             item.setLineAmount(expectedAmount);
             if (orderItemMapper.insert(item) != 1) throw new IllegalStateException("订单明细写入失败");
 
-            if (messagingEnabled) rabbit.convertAndSend(ORDER_EXCHANGE, "order.timeout", orderNo, delayed(30_000));
+            if (messagingEnabled) recordTimeout(orderNo, 30_000L);
         } catch (RuntimeException exception) {
             releaseInventory(request.skuId(), request.quantity());
             throw exception;
@@ -539,12 +548,16 @@ public class OrderService {
         }
     }
 
-    private MessagePostProcessor delayed(long millis) {
-        // 为订单超时消息设置过期时间，由死信交换机转发到取消队列。
-        return message -> {
-            message.getMessageProperties().setExpiration(String.valueOf(millis));
-            return message;
-        };
+    private void recordTimeout(String orderNo, long expiresInMs) {
+        if (outbox == null) {
+            rabbit.convertAndSend("xinghe.order.exchange", "order.timeout", orderNo, message -> {
+                message.getMessageProperties().setExpiration(String.valueOf(expiresInMs));
+                return message;
+            });
+            return;
+        }
+        outbox.record("ORDER_TIMEOUT", "order.timeout",
+                Map.of("orderNo", orderNo, "expiresAt", LocalDateTime.now().plusNanos(expiresInMs * 1_000_000L)));
     }
 
     /** 将指定子订单的所有锁定库存确认为已售出。 */

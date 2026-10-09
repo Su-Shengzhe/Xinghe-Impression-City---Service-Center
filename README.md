@@ -87,6 +87,22 @@ mvn -s maven-settings.xml spring-boot:run
 $env:XINGHE_MESSAGING_ENABLED = "true"
 ```
 
+阶段 E 的可靠消息链路使用 `message_outbox` 和 `message_processing` 两张表：订单超时与商品索引事件先和业务事务一起写入 Outbox，再由后台发布器以持久消息和 publisher confirm 发布。消费者按 `message_id` 幂等处理；失败消息经过两级延迟重试后进入 `xinghe.business.dead`，发布器自身失败达到 10 次时在 Outbox 标记为 `DEAD`。应用重启会回收滞留的 `PUBLISHING` 事件。
+
+商品查询默认仍走 MySQL。启用 ES 投影和查询降级时设置：
+
+```powershell
+$env:XINGHE_ELASTICSEARCH_ENABLED = "true"
+```
+
+商品管理的创建、资料更新和上下架会在同一事务写入 `product.index` 事件；ES 不可用时客服商品查询自动回退 MySQL。索引可重复重建：
+
+```http
+POST /api/store/products/rebuild-index
+```
+
+该接口只在 `XINGHE_ELASTICSEARCH_ENABLED=true` 时注册，重建前删除旧索引，再从 MySQL 全量写入当前商品。
+
 ## 客服接口
 
 创建会话：

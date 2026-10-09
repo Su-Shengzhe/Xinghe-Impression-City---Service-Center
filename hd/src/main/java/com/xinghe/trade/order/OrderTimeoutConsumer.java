@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.xinghe.trade.inventory.ProductInventoryMapper;
 import com.xinghe.trade.inventory.ProductInventory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.core.Message;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -13,6 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import com.xinghe.trade.messaging.MessageProcessingService;
 
 /** 消费订单延迟消息，取消未支付订单并释放数据库中的锁定库存。 */
 @Component
@@ -21,32 +25,55 @@ public class OrderTimeoutConsumer {
     private final TradeOrderMapper orderMapper;
     private final TradeOrderItemMapper orderItemMapper;
     private final ProductInventoryMapper inventoryMapper;
+    private final MessageProcessingService processing;
 
     @Autowired
     public OrderTimeoutConsumer(TradeOrderMapper orderMapper,
                                 TradeOrderItemMapper orderItemMapper,
-                                ProductInventoryMapper inventoryMapper) {
+                                ProductInventoryMapper inventoryMapper,
+                                MessageProcessingService processing) {
         this.orderMapper = orderMapper;
         this.orderItemMapper = orderItemMapper;
         this.inventoryMapper = inventoryMapper;
+        this.processing = processing;
+    }
+
+    public OrderTimeoutConsumer(TradeOrderMapper orderMapper, TradeOrderItemMapper orderItemMapper,
+                                ProductInventoryMapper inventoryMapper) {
+        this(orderMapper, orderItemMapper, inventoryMapper, null);
     }
 
     /** Compatibility constructor; timeout compensation no longer uses Redis inventory. */
     public OrderTimeoutConsumer(RedisTemplate<String, Object> ignoredRedis,
                                 TradeOrderMapper orderMapper,
                                 ProductInventoryMapper inventoryMapper) {
-        this(orderMapper, null, inventoryMapper);
+        this(orderMapper, null, inventoryMapper, null);
     }
 
     /** Compatibility constructor for callers that only provide order access. */
     public OrderTimeoutConsumer(RedisTemplate<String, Object> ignoredRedis,
                                 TradeOrderMapper orderMapper) {
-        this(orderMapper, null, null);
+        this(orderMapper, null, null, null);
     }
 
     @RabbitListener(queues = "xinghe.order.cancel")
     @Transactional
+    public void consume(Message message) {
+        String eventId = message.getMessageProperties().getMessageId();
+        String payload = new String(message.getBody(), java.nio.charset.StandardCharsets.UTF_8);
+        String orderNo = extractOrderNo(payload);
+        if (processing == null) {
+            cancelInternal(orderNo);
+        } else {
+            processing.processOnce(eventId, "ORDER_TIMEOUT", () -> cancelInternal(orderNo));
+        }
+    }
+
     public void cancel(String orderNo) {
+        cancelInternal(orderNo);
+    }
+
+    private void cancelInternal(String orderNo) {
         TradeOrder order = orderMapper.selectById(orderNo);
         if (order == null) return;
         String parentOrderNo = order.getParentOrderNo() == null ? orderNo : order.getParentOrderNo();
@@ -60,6 +87,11 @@ public class OrderTimeoutConsumer {
             return;
         }
         cancelChild(order);
+    }
+
+    private String extractOrderNo(String payload) {
+        Matcher matcher = Pattern.compile("\\\"orderNo\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"").matcher(payload);
+        return matcher.find() ? matcher.group(1) : payload;
     }
 
     /** 只有条件取消成功的消息才释放库存，重复投递不会重复补偿。 */
