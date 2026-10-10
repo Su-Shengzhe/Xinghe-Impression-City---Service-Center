@@ -10,6 +10,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
 @RestControllerAdvice
 public class CustomerServiceExceptionHandler {
@@ -22,6 +23,12 @@ public class CustomerServiceExceptionHandler {
     public ApiResponse<Void> validation(MethodArgumentNotValidException exception, HttpServletRequest request) {
         FieldError error = exception.getBindingResult().getFieldError();
         return ApiResponse.fail(error == null ? "请求参数无效" : error.getDefaultMessage());
+    }
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> methodValidation(HandlerMethodValidationException exception, HttpServletRequest request) {
+        return ApiResponse.fail("请求参数无效");
     }
 
     // 阶段 A：订单状态冲突统一返回 409，便于前端区分业务失败和系统故障。
