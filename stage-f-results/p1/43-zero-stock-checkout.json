@@ -1,0 +1,7 @@
+{
+  "name": "43-zero-stock-checkout",
+  "status": 409,
+  "expected": "409",
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"商品库存不足\",\"data\":null}"
+}

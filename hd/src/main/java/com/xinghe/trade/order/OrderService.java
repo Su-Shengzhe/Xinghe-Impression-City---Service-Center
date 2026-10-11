@@ -28,6 +28,8 @@ import java.util.UUID;
 import java.util.List;
 import java.util.Map;
 import java.util.LinkedHashMap;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /** 负责旧单笔下单、购物车结算和待支付订单的支付状态流转。 */
 @Service
@@ -292,6 +294,22 @@ public class OrderService {
         if (orderMapper.updateById(order) != 1) throw new IllegalStateException("订单发货状态更新失败");
         updateParentStatus(order.getParentOrderNo());
         return logistics;
+    }
+
+    /** 查询当前店铺的子订单及物流；这里只返回该店铺拥有的订单。 */
+    @Transactional(readOnly = true)
+    public List<StoreOrderView> storeOrders(Long storeId) {
+        if (storeId == null || storeId <= 0) throw new IllegalArgumentException("店铺 ID 必须为正整数");
+        List<TradeOrder> orders = orderMapper.selectStoreOrders(storeId);
+        if (orders.isEmpty()) return List.of();
+        List<String> orderNos = orders.stream().map(TradeOrder::getOrderNo).toList();
+        Map<String, LogisticsRecord> logisticsByOrderNo = logisticsMapper.selectList(
+                        new LambdaQueryWrapper<LogisticsRecord>().in(LogisticsRecord::getOrderNo, orderNos))
+                .stream()
+                .collect(Collectors.toMap(LogisticsRecord::getOrderNo, Function.identity(), (first, ignored) -> first));
+        return orders.stream()
+                .map(order -> new StoreOrderView(order, logisticsByOrderNo.get(order.getOrderNo())))
+                .toList();
     }
 
     /** 根据请求身份读取订单，避免查询和取消接口越权访问。 */
@@ -627,4 +645,6 @@ public class OrderService {
 
     /** 返回结算父订单和店铺子订单编号及其当前状态。 */
     public record OrderResult(String orderNo, String status) {}
+
+    public record StoreOrderView(TradeOrder order, LogisticsRecord logistics) {}
 }

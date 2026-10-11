@@ -1,0 +1,7 @@
+{
+  "name": "34-message-history",
+  "status": 200,
+  "expected": "200 >=2",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":[{\"messageId\":\"3d765dc8d04b4e08a9850058242d9a40\",\"sessionId\":\"6ad05bc7e81f41889178ecd96839f6c0\",\"messageType\":\"USER\",\"intent\":\"USER_QUERY\",\"content\":\"查询订单 XH1791626726063AB4FEA 的物流\",\"createdAt\":\"2026-10-10T18:05:27\"},{\"messageId\":\"4a13d735a61440918be910ac7f4efbba\",\"sessionId\":\"6ad05bc7e81f41889178ecd96839f6c0\",\"messageType\":\"ASSISTANT\",\"intent\":\"LOGISTICS_QUERY\",\"content\":\"物流信息尚未同步\",\"createdAt\":\"2026-10-10T18:05:27\"}]}"
+}

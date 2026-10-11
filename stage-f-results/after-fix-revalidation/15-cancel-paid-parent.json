@@ -1,0 +1,9 @@
+{
+  "name": "15-cancel-paid-parent",
+  "method": "Post",
+  "uri": "http://localhost:8082/api/orders/XH17916377907788A1892/cancel",
+  "status": 409,
+  "expected": "409",
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"当前订单不可取消\",\"data\":null}"
+}

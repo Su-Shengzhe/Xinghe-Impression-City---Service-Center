@@ -1,0 +1,9 @@
+{
+  "name": "10-store-orders-batch",
+  "method": "Get",
+  "uri": "http://localhost:8082/api/orders/store",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":[{\"order\":{\"orderNo\":\"XH17916381101855415EA\",\"parentOrderNo\":\"XH1791638110182D52A1F\",\"userId\":\"stage-f-fix-second-user\",\"storeId\":1,\"skuId\":null,\"quantity\":null,\"amount\":13.75,\"status\":\"PAID\",\"createdAt\":\"2026-10-10T21:15:10\",\"updatedAt\":\"2026-10-10T21:15:10\"},\"logistics\":null},{\"order\":{\"orderNo\":\"XH17916377907825F0A08\",\"parentOrderNo\":\"XH17916377907788A1892\",\"userId\":\"stage-f-fix-user\",\"storeId\":1,\"skuId\":null,\"quantity\":null,\"amount\":25.00,\"status\":\"SHIPPED\",\"createdAt\":\"2026-10-10T21:09:51\",\"updatedAt\":\"2026-10-10T21:15:10\"},\"logistics\":{\"id\":2108909202315005954,\"orderNo\":\"XH17916377907825F0A08\",\"company\":\"Stage F Fix Carrier\",\"trackingNo\":\"SF-FIX-TRACK-1\",\"status\":\"SHIPPED\",\"description\":\"商家已发货\",\"updatedAt\":\"2026-10-10T21:15:10\"}}]}"
+}

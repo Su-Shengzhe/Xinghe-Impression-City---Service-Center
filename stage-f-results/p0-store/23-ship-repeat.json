@@ -1,0 +1,7 @@
+{
+  "name": "23-ship-repeat",
+  "status": 409,
+  "expected": "409",
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"仅已支付订单可以发货\",\"data\":null}"
+}

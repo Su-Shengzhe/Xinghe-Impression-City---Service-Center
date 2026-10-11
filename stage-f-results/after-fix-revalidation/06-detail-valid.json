@@ -1,0 +1,9 @@
+{
+  "name": "06-detail-valid",
+  "method": "Get",
+  "uri": "http://localhost:8082/api/customer-service/products/990020",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"id\":990020,\"storeId\":1,\"name\":\"Stage F Fix Product A\",\"description\":\"Stage F repair validation product A\",\"price\":12.50,\"status\":\"ON_SALE\",\"createdAt\":\"2026-10-10T21:05:53\",\"updatedAt\":\"2026-10-10T21:05:53\"}}"
+}

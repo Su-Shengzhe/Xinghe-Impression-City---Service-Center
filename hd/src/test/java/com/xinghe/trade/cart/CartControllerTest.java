@@ -32,4 +32,15 @@ class CartControllerTest {
 
         verify(service).remove("user-1", 10001L);
     }
+
+    /** 验证清空请求只使用请求头中的当前用户。 */
+    @Test
+    void clearsUsingCurrentHeaderUser() {
+        CartService service = mock(CartService.class);
+        CartController controller = new CartController(service);
+
+        controller.clear("user-1");
+
+        verify(service).clear("user-1");
+    }
 }

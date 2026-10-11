@@ -1,0 +1,7 @@
+{
+  "name": "16-checkout",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":[{\"orderNo\":\"XH1791626726063AB4FEA\",\"status\":\"PENDING_PAYMENT\"},{\"orderNo\":\"XH1791626726071B5207F\",\"status\":\"PENDING_PAYMENT\"}]}"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "26-customer-order-owned",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"orderNo\":\"XH1791626726063AB4FEA\",\"userId\":\"stage-f-p0-user-20261010\",\"skuId\":null,\"quantity\":null,\"amount\":3.00,\"status\":\"SHIPPED\",\"createdAt\":\"2026-10-10T18:05:26\"}}"
+}

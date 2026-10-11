@@ -1,0 +1,7 @@
+{
+  "name": "31-session-owned",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"sessionId\":\"6ad05bc7e81f41889178ecd96839f6c0\",\"userId\":\"stage-f-p0-user-20261010\",\"status\":\"OPEN\",\"createdAt\":\"2026-10-10T18:05:26\",\"updatedAt\":\"2026-10-10T18:05:26\"}}"
+}

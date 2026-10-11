@@ -1,0 +1,7 @@
+{
+  "name": "11-product-update-other-store",
+  "status": 400,
+  "expected": "400/403",
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"店铺商品不存在\",\"data\":null}"
+}

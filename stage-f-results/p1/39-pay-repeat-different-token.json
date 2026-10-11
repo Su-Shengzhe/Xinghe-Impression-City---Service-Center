@@ -1,0 +1,7 @@
+{
+  "name": "39-pay-repeat-different-token",
+  "status": 409,
+  "expected": "409",
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"当前订单不可支付\",\"data\":null}"
+}

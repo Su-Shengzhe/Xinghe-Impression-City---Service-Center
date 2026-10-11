@@ -1,0 +1,6 @@
+{
+  "name": "05-inventory-negative-after-fix",
+  "status": 400,
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"请求参数无效\",\"data\":null}"
+}

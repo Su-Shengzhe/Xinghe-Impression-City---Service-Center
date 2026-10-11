@@ -1,0 +1,6 @@
+{
+  "name": "04-inventory-update-after-fix",
+  "status": 200,
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"skuId\":990010,\"availableQuantity\":7,\"lockedQuantity\":0,\"version\":6,\"soldQuantity\":1,\"updatedAt\":\"2026-10-10T18:48:43\"}}"
+}

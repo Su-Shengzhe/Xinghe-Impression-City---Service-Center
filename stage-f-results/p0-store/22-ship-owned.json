@@ -1,0 +1,7 @@
+{
+  "name": "22-ship-owned",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"id\":2108861455134208001,\"orderNo\":\"XH1791626726071B5207F\",\"company\":\"StageCarrier\",\"trackingNo\":\"SF-OK-20261010\",\"status\":\"SHIPPED\",\"description\":\"商家已发货\",\"updatedAt\":\"2026-10-10T18:05:26.3107207\"}}"
+}

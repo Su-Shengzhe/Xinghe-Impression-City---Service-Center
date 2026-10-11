@@ -1,0 +1,7 @@
+{
+  "name": "07-product-detail-off-sale",
+  "status": 400,
+  "expected": "400",
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"商品不存在或已下架\",\"data\":null}"
+}

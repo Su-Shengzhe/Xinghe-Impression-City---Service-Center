@@ -1,0 +1,9 @@
+{
+  "name": "04-detail-invalid-0",
+  "method": "Get",
+  "uri": "http://localhost:8082/api/customer-service/products/0",
+  "status": 400,
+  "expected": "400",
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"请求参数无效\",\"data\":null}"
+}

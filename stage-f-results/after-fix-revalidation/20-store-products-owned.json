@@ -1,0 +1,9 @@
+{
+  "name": "20-store-products-owned",
+  "method": "Get",
+  "uri": "http://localhost:8082/api/store/products",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":[{\"product\":{\"id\":990020,\"storeId\":1,\"name\":\"Stage F Fix Product A Updated\",\"description\":\"Updated description for Stage F repair validation\",\"price\":13.75,\"status\":\"ON_SALE\",\"createdAt\":\"2026-10-10T21:05:53\",\"updatedAt\":\"2026-10-10T21:09:51\"},\"inventory\":{\"skuId\":990020,\"availableQuantity\":6,\"lockedQuantity\":0,\"version\":5,\"soldQuantity\":3,\"updatedAt\":\"2026-10-10T21:15:10\"}}]}"
+}

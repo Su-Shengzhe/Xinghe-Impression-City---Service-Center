@@ -1,0 +1,7 @@
+{
+  "name": "02-product-list-owned",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":[{\"product\":{\"id\":990010,\"storeId\":1,\"name\":\"Stage F Fulfillment Item\",\"description\":\"Stage F fulfillment evidence\",\"price\":2.50,\"status\":\"ON_SALE\",\"createdAt\":\"2026-10-10T18:05:25\",\"updatedAt\":\"2026-10-10T18:05:25\"},\"inventory\":{\"skuId\":990010,\"availableQuantity\":8,\"lockedQuantity\":0,\"version\":0,\"soldQuantity\":0,\"updatedAt\":\"2026-10-10T18:05:25\"}},{\"product\":{\"id\":10001,\"storeId\":1,\"name\":\"星河精选运动鞋\",\"description\":\"用于客服 Agent 商品查询和交易联调的演示商品\",\"price\":199.00,\"status\":\"ON_SALE\",\"createdAt\":\"2026-10-10T17:33:36\",\"updatedAt\":\"2026-10-10T17:33:36\"},\"inventory\":{\"skuId\":10001,\"availableQuantity\":20,\"lockedQuantity\":0,\"version\":0,\"soldQuantity\":0,\"updatedAt\":\"2026-10-10T17:33:36\"}},{\"product\":{\"id\":990001,\"storeId\":1,\"name\":\"Stage F Test Item\",\"description\":\"Dedicated Stage F isolated test SKU\",\"price\":1.00,\"status\":\"ON_SALE\",\"createdAt\":\"2026-10-10T16:43:30\",\"updatedAt\":\"2026-10-10T16:43:30\"},\"inventory\":{\"skuId\":990001,\"availableQuantity\":97,\"lockedQuantity\":0,\"version\":4,\"soldQuantity\":3,\"updatedAt\":\"2026-10-10T17:37:24\"}}]}"
+}

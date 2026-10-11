@@ -6,6 +6,7 @@ import com.xinghe.trade.product.Product;
 import com.xinghe.trade.product.ProductQueryService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -86,6 +87,11 @@ public class CustomerServiceController {
     public ApiResponse<List<Product>> products(@RequestParam(defaultValue = "") String keyword) {
         // 搜索当前在售商品，供客服工作台和 Agent 工具使用。
         return ApiResponse.ok(productQueryService.search(keyword));
+    }
+
+    @GetMapping("/products/{skuId}")
+    public ApiResponse<Product> product(@PathVariable @Positive Long skuId) {
+        return ApiResponse.ok(productQueryService.detail(skuId));
     }
 
     private String requireUser(String userId) {

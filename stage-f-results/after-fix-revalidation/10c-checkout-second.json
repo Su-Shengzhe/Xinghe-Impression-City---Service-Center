@@ -1,0 +1,9 @@
+{
+  "name": "10c-checkout-second",
+  "method": "Post",
+  "uri": "http://localhost:8082/api/orders/checkout",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":[{\"orderNo\":\"XH1791638110182D52A1F\",\"status\":\"PENDING_PAYMENT\"},{\"orderNo\":\"XH17916381101855415EA\",\"status\":\"PENDING_PAYMENT\"}]}"
+}

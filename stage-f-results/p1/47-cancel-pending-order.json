@@ -1,0 +1,7 @@
+{
+  "name": "47-cancel-pending-order",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":null}"
+}

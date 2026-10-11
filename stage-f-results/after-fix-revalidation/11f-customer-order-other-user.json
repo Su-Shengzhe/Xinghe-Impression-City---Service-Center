@@ -1,0 +1,9 @@
+{
+  "name": "11f-customer-order-other-user",
+  "method": "Get",
+  "uri": "http://localhost:8082/api/customer-service/orders/XH17916377907825F0A08",
+  "status": 403,
+  "expected": "403",
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"无权查询该订单\",\"data\":null}"
+}

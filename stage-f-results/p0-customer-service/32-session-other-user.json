@@ -1,0 +1,7 @@
+{
+  "name": "32-session-other-user",
+  "status": 403,
+  "expected": "403",
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"无权访问该会话\",\"data\":null}"
+}

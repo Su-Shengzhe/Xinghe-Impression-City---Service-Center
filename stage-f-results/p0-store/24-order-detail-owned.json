@@ -1,0 +1,7 @@
+{
+  "name": "24-order-detail-owned",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"order\":{\"orderNo\":\"XH1791626726063AB4FEA\",\"parentOrderNo\":null,\"userId\":\"stage-f-p0-user-20261010\",\"storeId\":null,\"skuId\":null,\"quantity\":null,\"amount\":3.00,\"status\":\"SHIPPED\",\"createdAt\":\"2026-10-10T18:05:26\",\"updatedAt\":\"2026-10-10T18:05:26\"},\"childOrders\":[{\"orderNo\":\"XH1791626726071B5207F\",\"parentOrderNo\":\"XH1791626726063AB4FEA\",\"userId\":\"stage-f-p0-user-20261010\",\"storeId\":1,\"skuId\":null,\"quantity\":null,\"amount\":3.00,\"status\":\"SHIPPED\",\"createdAt\":\"2026-10-10T18:05:26\",\"updatedAt\":\"2026-10-10T18:05:26\"}],\"items\":[{\"id\":4,\"orderNo\":\"XH1791626726071B5207F\",\"skuId\":990010,\"quantity\":1,\"unitPrice\":3.00,\"lineAmount\":3.00}]}}"
+}

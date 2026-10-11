@@ -1,0 +1,7 @@
+{
+  "name": "42-zero-stock-cart-add",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"skuId\":990011,\"productName\":\"Stage F Zero Stock\",\"storeId\":1,\"unitPrice\":1.00,\"quantity\":1,\"lineAmount\":1.00}}"
+}

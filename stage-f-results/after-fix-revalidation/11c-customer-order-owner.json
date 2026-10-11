@@ -1,0 +1,9 @@
+{
+  "name": "11c-customer-order-owner",
+  "method": "Get",
+  "uri": "http://localhost:8082/api/customer-service/orders/XH17916377907825F0A08",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"orderNo\":\"XH17916377907825F0A08\",\"userId\":\"stage-f-fix-user\",\"skuId\":null,\"quantity\":null,\"amount\":25.00,\"status\":\"SHIPPED\",\"createdAt\":\"2026-10-10T21:09:51\"}}"
+}

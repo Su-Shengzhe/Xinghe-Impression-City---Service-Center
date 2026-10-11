@@ -1,0 +1,9 @@
+{
+  "name": "14-ship-repeat",
+  "method": "Post",
+  "uri": "http://localhost:8082/api/orders/XH17916377907825F0A08/ship",
+  "status": 409,
+  "expected": "409",
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"仅已支付订单可以发货\",\"data\":null}"
+}

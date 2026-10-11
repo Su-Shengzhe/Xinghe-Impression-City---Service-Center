@@ -1,0 +1,9 @@
+{
+  "name": "17-detail-off-sale",
+  "method": "Get",
+  "uri": "http://localhost:8082/api/customer-service/products/990021",
+  "status": 400,
+  "expected": "400",
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"商品不存在或已下架\",\"data\":null}"
+}

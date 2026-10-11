@@ -1,0 +1,7 @@
+{
+  "name": "44-empty-cart-checkout",
+  "status": 409,
+  "expected": "400",
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"购物车为空\",\"data\":null}"
+}

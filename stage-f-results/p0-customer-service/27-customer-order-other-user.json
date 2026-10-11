@@ -1,0 +1,7 @@
+{
+  "name": "27-customer-order-other-user",
+  "status": 403,
+  "expected": "403",
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"无权查询该订单\",\"data\":null}"
+}

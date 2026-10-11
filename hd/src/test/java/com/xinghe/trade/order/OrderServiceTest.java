@@ -6,6 +6,8 @@ import com.xinghe.trade.cart.CartItem;
 import com.xinghe.trade.cart.CartItemMapper;
 import com.xinghe.trade.inventory.ProductInventoryMapper;
 import com.xinghe.trade.inventory.ProductInventory;
+import com.xinghe.trade.logistics.LogisticsMapper;
+import com.xinghe.trade.logistics.LogisticsRecord;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -14,6 +16,7 @@ import org.springframework.data.redis.core.ValueOperations;
 import java.time.Duration;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -291,6 +294,63 @@ class OrderServiceTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("订单已取消，支付失败");
         verify(redis).delete("pay:idempotent:token-1");
+    }
+
+    /** 确认店铺订单列表批量读取物流，并按订单顺序组装结果。 */
+    @Test
+    void loadsStoreOrderLogisticsWithOneBatchQuery() {
+        TradeOrderMapper orderMapper = mock(TradeOrderMapper.class);
+        LogisticsMapper logisticsMapper = mock(LogisticsMapper.class);
+        TradeOrder first = storeOrder("ORDER-1");
+        TradeOrder second = storeOrder("ORDER-2");
+        LogisticsRecord secondLogistics = logistics("ORDER-2");
+        LogisticsRecord firstLogistics = logistics("ORDER-1");
+        when(orderMapper.selectStoreOrders(5L)).thenReturn(List.of(first, second));
+        when(logisticsMapper.selectList(any(LambdaQueryWrapper.class)))
+                .thenReturn(List.of(secondLogistics, firstLogistics));
+
+        OrderService service = new OrderService(mock(RedisTemplate.class), mock(RabbitTemplate.class),
+                orderMapper, mock(TradeOrderItemMapper.class), mock(ProductMapper.class),
+                mock(CartItemMapper.class), mock(ProductInventoryMapper.class), logisticsMapper);
+
+        List<OrderService.StoreOrderView> result = service.storeOrders(5L);
+
+        assertThat(result).extracting(view -> view.order().getOrderNo())
+                .containsExactly("ORDER-1", "ORDER-2");
+        assertThat(result).extracting(view -> view.logistics().getOrderNo())
+                .containsExactly("ORDER-1", "ORDER-2");
+        verify(logisticsMapper, times(1)).selectList(any(LambdaQueryWrapper.class));
+        verify(logisticsMapper, never()).selectOne(any(LambdaQueryWrapper.class));
+    }
+
+    /** 确认没有店铺订单时不发起无意义的物流查询。 */
+    @Test
+    void doesNotQueryLogisticsWhenStoreHasNoOrders() {
+        TradeOrderMapper orderMapper = mock(TradeOrderMapper.class);
+        LogisticsMapper logisticsMapper = mock(LogisticsMapper.class);
+        when(orderMapper.selectStoreOrders(5L)).thenReturn(new ArrayList<>());
+
+        OrderService service = new OrderService(mock(RedisTemplate.class), mock(RabbitTemplate.class),
+                orderMapper, mock(TradeOrderItemMapper.class), mock(ProductMapper.class),
+                mock(CartItemMapper.class), mock(ProductInventoryMapper.class), logisticsMapper);
+
+        assertThat(service.storeOrders(5L)).isEmpty();
+        verifyNoInteractions(logisticsMapper);
+    }
+
+    private TradeOrder storeOrder(String orderNo) {
+        TradeOrder order = new TradeOrder();
+        order.setOrderNo(orderNo);
+        order.setStoreId(5L);
+        order.setParentOrderNo("PARENT-1");
+        return order;
+    }
+
+    private LogisticsRecord logistics(String orderNo) {
+        LogisticsRecord record = new LogisticsRecord();
+        record.setOrderNo(orderNo);
+        record.setStatus("SHIPPED");
+        return record;
     }
 
     private Product product(String status, String price) {

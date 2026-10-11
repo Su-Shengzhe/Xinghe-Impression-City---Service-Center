@@ -9,6 +9,8 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 /** 提供店铺商品维护和数据库库存管理接口。 */
 @RestController
 @RequestMapping("/api/store/products")
@@ -17,6 +19,13 @@ public class ProductManagementController {
 
     /** 注入商品管理服务，由服务层执行店铺归属校验。 */
     public ProductManagementController(ProductManagementService service) { this.service = service; }
+
+    /** 查询当前店铺商品及库存；店铺归属由服务层校验。 */
+    @GetMapping
+    public ApiResponse<List<ProductManagementService.ProductStockView>> list(
+            @RequestHeader("X-Store-Id") @Positive Long storeId) {
+        return ApiResponse.ok(service.list(storeId));
+    }
 
     /** 为请求指定的店铺创建商品和初始库存。 */
     @PostMapping
@@ -31,8 +40,7 @@ public class ProductManagementController {
                                        @PathVariable @Positive Long skuId,
                                        @Valid @RequestBody ProductUpdateRequest request) {
         return ApiResponse.ok(service.update(storeId, skuId,
-                new ProductManagementService.ProductRequest(skuId, request.name(), request.description(),
-                        request.price(), 0)));
+                new ProductManagementService.ProductUpdateRequest(request.name(), request.description(), request.price())));
     }
 
     /** 切換店鋪商品的在售或下架狀態。 */

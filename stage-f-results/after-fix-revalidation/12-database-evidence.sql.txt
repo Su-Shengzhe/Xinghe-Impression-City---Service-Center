@@ -1,0 +1,71 @@
+Database: xinghe_stage_f_fix
+SQL:
+SELECT DATABASE();
+SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;
+SELECT id,name,status FROM store WHERE id IN (1,2) ORDER BY id;
+SELECT p.id,p.store_id,p.name,p.description,p.price,p.status,i.available_quantity,i.locked_quantity,i.sold_quantity,i.version FROM product p LEFT JOIN product_inventory i ON i.sku_id=p.id WHERE p.id IN (990020,990021) ORDER BY p.id;
+SELECT order_no,parent_order_no,user_id,store_id,status,amount,created_at,updated_at FROM trade_order WHERE order_no IN ('XH17916377907788A1892','XH17916377907825F0A08','XH1791638110182D52A1F','XH17916381101855415EA') ORDER BY created_at,order_no;
+SELECT order_no,sku_id,quantity,unit_price,line_amount FROM trade_order_item WHERE order_no IN ('XH17916377907788A1892','XH17916377907825F0A08','XH1791638110182D52A1F','XH17916381101855415EA') ORDER BY order_no,id;
+SELECT order_no,company,tracking_no,status,description,updated_at FROM logistics_record WHERE order_no IN ('XH17916377907825F0A08','XH17916381101855415EA') ORDER BY order_no;
+SELECT token,order_no,user_id,status,result_status,error_message FROM payment_idempotency WHERE order_no IN ('XH17916377907788A1892','XH1791638110182D52A1F') ORDER BY token;
+SELECT event_type,routing_key,status,attempts FROM message_outbox ORDER BY created_at,event_id;
+OUTPUT:
++--------------------+
+| DATABASE()         |
++--------------------+
+| xinghe_stage_f_fix |
++--------------------+
++---------+----------------------------+---------+
+| version | description                | success |
++---------+----------------------------+---------+
+| 1       | baseline schema            |       1 |
+| 2       | stage d concurrency        |       1 |
+| 3       | stage e reliable messaging |       1 |
++---------+----------------------------+---------+
++----+-------------------------+--------+
+| id | name                    | status |
++----+-------------------------+--------+
+|  1 | Stage F Fix Store       | OPEN   |
+|  2 | Stage F Fix Other Store | OPEN   |
++----+-------------------------+--------+
++--------+----------+-------------------------------+---------------------------------------------------+-------+---------+--------------------+-----------------+---------------+---------+
+| id     | store_id | name                          | description                                       | price | status  | available_quantity | locked_quantity | sold_quantity | version |
++--------+----------+-------------------------------+---------------------------------------------------+-------+---------+--------------------+-----------------+---------------+---------+
+| 990020 |        1 | Stage F Fix Product A Updated | Updated description for Stage F repair validation | 13.75 | ON_SALE |                  6 |               0 |             3 |       5 |
+| 990021 |        2 | Stage F Fix Product B         | Stage F repair validation product B               | 15.00 | ON_SALE |                 10 |               0 |             0 |       0 |
++--------+----------+-------------------------------+---------------------------------------------------+-------+---------+--------------------+-----------------+---------------+---------+
++-----------------------+-----------------------+-------------------------+----------+---------+--------+---------------------+---------------------+
+| order_no              | parent_order_no       | user_id                 | store_id | status  | amount | created_at          | updated_at          |
++-----------------------+-----------------------+-------------------------+----------+---------+--------+---------------------+---------------------+
+| XH17916377907788A1892 | NULL                  | stage-f-fix-user        |     NULL | SHIPPED |  25.00 | 2026-10-10 21:09:51 | 2026-10-10 21:15:10 |
+| XH17916377907825F0A08 | XH17916377907788A1892 | stage-f-fix-user        |        1 | SHIPPED |  25.00 | 2026-10-10 21:09:51 | 2026-10-10 21:15:10 |
+| XH1791638110182D52A1F | NULL                  | stage-f-fix-second-user |     NULL | PAID    |  13.75 | 2026-10-10 21:15:10 | 2026-10-10 21:15:10 |
+| XH17916381101855415EA | XH1791638110182D52A1F | stage-f-fix-second-user |        1 | PAID    |  13.75 | 2026-10-10 21:15:10 | 2026-10-10 21:15:10 |
++-----------------------+-----------------------+-------------------------+----------+---------+--------+---------------------+---------------------+
++-----------------------+--------+----------+------------+-------------+
+| order_no              | sku_id | quantity | unit_price | line_amount |
++-----------------------+--------+----------+------------+-------------+
+| XH17916377907825F0A08 | 990020 |        2 |      12.50 |       25.00 |
+| XH17916381101855415EA | 990020 |        1 |      13.75 |       13.75 |
++-----------------------+--------+----------+------------+-------------+
++-----------------------+---------------------+----------------+---------+-------------+---------------------+
+| order_no              | company             | tracking_no    | status  | description | updated_at          |
++-----------------------+---------------------+----------------+---------+-------------+---------------------+
+| XH17916377907825F0A08 | Stage F Fix Carrier | SF-FIX-TRACK-1 | SHIPPED | 商家已发货  | 2026-10-10 21:15:10 |
++-----------------------+---------------------+----------------+---------+-------------+---------------------+
++------------------------+-----------------------+-------------------------+-----------+---------------+---------------+
+| token                  | order_no              | user_id                 | status    | result_status | error_message |
++------------------------+-----------------------+-------------------------+-----------+---------------+---------------+
+| stage-f-fix-pay-first  | XH17916377907788A1892 | stage-f-fix-user        | SUCCEEDED | PAID          | NULL          |
+| stage-f-fix-pay-second | XH1791638110182D52A1F | stage-f-fix-second-user | SUCCEEDED | PAID          | NULL          |
++------------------------+-----------------------+-------------------------+-----------+---------------+---------------+
++---------------+---------------+---------+----------+
+| event_type    | routing_key   | status  | attempts |
++---------------+---------------+---------+----------+
+| PRODUCT_INDEX | product.index | PENDING |        0 |
+| PRODUCT_INDEX | product.index | PENDING |        0 |
+| PRODUCT_INDEX | product.index | PENDING |        0 |
+| PRODUCT_INDEX | product.index | PENDING |        0 |
+| PRODUCT_INDEX | product.index | PENDING |        0 |
+| PRODUCT_INDEX | product.index | PENDING |        0 |
++---------------+---------------+---------+----------+

@@ -1,0 +1,7 @@
+{
+  "name": "04-inventory-update",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"skuId\":990010,\"availableQuantity\":8,\"lockedQuantity\":0,\"version\":1,\"soldQuantity\":0,\"updatedAt\":\"2026-10-10T18:05:25\"}}"
+}

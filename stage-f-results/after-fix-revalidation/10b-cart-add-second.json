@@ -1,0 +1,9 @@
+{
+  "name": "10b-cart-add-second",
+  "method": "Post",
+  "uri": "http://localhost:8082/api/cart/items",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"skuId\":990020,\"productName\":\"Stage F Fix Product A Updated\",\"storeId\":1,\"unitPrice\":13.75,\"quantity\":1,\"lineAmount\":13.75}}"
+}

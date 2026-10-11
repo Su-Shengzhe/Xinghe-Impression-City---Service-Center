@@ -1,0 +1,6 @@
+Timestamp=2026-10-10T20:49:24.3890073+08:00
+PowerShell=7.6.6
+Commit=c759c381e27fa40712d5ba4fc9b4f923d25bbaa0
+DatabaseTarget=xinghe_stage_f_fix
+Backend=http://localhost:8082 (8081 existing instance was not reused)
+ExistingEvidencePreserved=true

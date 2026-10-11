@@ -1,0 +1,9 @@
+{
+  "name": "13-pay-repeat-different-token",
+  "method": "Post",
+  "uri": "http://localhost:8082/api/orders/XH17916377907788A1892/pay",
+  "status": 409,
+  "expected": "409",
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"当前订单不可支付\",\"data\":null}"
+}

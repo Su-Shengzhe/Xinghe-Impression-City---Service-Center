@@ -1,0 +1,6 @@
+{
+  "name": "50-sse-child-logistics-after-fix",
+  "status": 200,
+  "contentType": "text/event-stream",
+  "content": "event:message\ndata:{\"messageId\":\"9dcff17883d0453e93b00fec50361c20\",\"sessionId\":\"6ad05bc7e81f41889178ecd96839f6c0\",\"messageType\":\"ASSISTANT\",\"intent\":\"LOGISTICS_QUERY\",\"content\":\"订单 XH1791626726071B5207F 的物流状态为“SHIPPED”，承运公司：StageCarrier，运单号：SF-OK-20261010。最新动态：商家已发货\",\"createdAt\":\"2026-10-10T18:48:45.4124214\"}\n\nevent:complete\ndata:DONE\n\n"
+}

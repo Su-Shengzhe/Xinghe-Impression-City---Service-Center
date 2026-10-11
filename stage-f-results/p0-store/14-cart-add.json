@@ -1,0 +1,7 @@
+{
+  "name": "14-cart-add",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"skuId\":990010,\"productName\":\"Stage F Fulfillment Item Updated\",\"storeId\":1,\"unitPrice\":3.00,\"quantity\":1,\"lineAmount\":3.00}}"
+}

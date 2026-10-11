@@ -1,0 +1,7 @@
+{
+  "name": "48-cancel-repeat",
+  "status": 409,
+  "expected": "409",
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"当前订单不可取消\",\"data\":null}"
+}

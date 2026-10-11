@@ -1,0 +1,6 @@
+{
+  "skuId": 990021,
+  "storeId": "2",
+  "status": 200,
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"id\":990021,\"storeId\":2,\"name\":\"Stage F Fix Product B\",\"description\":\"Stage F repair validation product B\",\"price\":15.0,\"status\":\"ON_SALE\",\"createdAt\":\"2026-10-10T21:05:53.4894528\",\"updatedAt\":\"2026-10-10T21:05:53.4894528\"}}"
+}

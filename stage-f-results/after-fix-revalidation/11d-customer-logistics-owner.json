@@ -1,0 +1,9 @@
+{
+  "name": "11d-customer-logistics-owner",
+  "method": "Get",
+  "uri": "http://localhost:8082/api/customer-service/orders/XH17916377907825F0A08/logistics",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"orderNo\":\"XH17916377907825F0A08\",\"company\":\"Stage F Fix Carrier\",\"trackingNo\":\"SF-FIX-TRACK-1\",\"status\":\"SHIPPED\",\"description\":\"商家已发货\",\"updatedAt\":\"2026-10-10T21:15:10\"}}"
+}

@@ -1,0 +1,109 @@
+ M .env.example
+ M README.md
+ M hd/src/main/java/com/xinghe/trade/customer/CustomerServiceController.java
+ M hd/src/main/java/com/xinghe/trade/order/OrderController.java
+ M hd/src/main/java/com/xinghe/trade/order/OrderService.java
+ M hd/src/main/java/com/xinghe/trade/order/TradeOrderMapper.java
+ M hd/src/main/java/com/xinghe/trade/product/ProductManagementController.java
+ M hd/src/main/java/com/xinghe/trade/product/ProductManagementService.java
+ M hd/src/main/java/com/xinghe/trade/product/ProductQueryService.java
+ M hd/src/main/resources/application.yml
+ M hd/src/test/java/com/xinghe/trade/order/OrderServiceTest.java
+ M hd/src/test/java/com/xinghe/trade/product/ProductManagementServiceTest.java
+ M qd/src/App.vue
+ M qd/src/style.css
+ M "\346\226\271\346\241\210\350\256\241\345\210\222.md"
+?? hd/src/test/java/com/xinghe/trade/customer/CustomerServiceControllerTest.java
+?? "stage-e-results/\351\230\266\346\256\265E\346\211\247\350\241\214\350\256\260\345\275\225.md"
+?? stage-f-results/after-fix-revalidation/00-baseline.txt
+?? stage-f-results/after-fix/04-inventory-update-after-fix.json
+?? stage-f-results/after-fix/05-inventory-negative-after-fix.json
+?? stage-f-results/after-fix/50-sse-child-logistics-after-fix.json
+?? stage-f-results/baseline/backend-app.err
+?? stage-f-results/baseline/backend-app.pid
+?? stage-f-results/final-report/database-evidence-after-fix.txt
+?? stage-f-results/final-report/database-evidence-live.txt
+?? stage-f-results/final-report/defect-list.md
+?? stage-f-results/final-report/execution-record.md
+?? stage-f-results/final-report/summary.md
+?? stage-f-results/live-run-meta.json
+?? stage-f-results/p0-customer-service/26-customer-order-owned.json
+?? stage-f-results/p0-customer-service/27-customer-order-other-user.json
+?? stage-f-results/p0-customer-service/28-customer-logistics-owned.json
+?? stage-f-results/p0-customer-service/29-customer-logistics-other-user.json
+?? stage-f-results/p0-customer-service/30-session-create.json
+?? stage-f-results/p0-customer-service/31-session-owned.json
+?? stage-f-results/p0-customer-service/32-session-other-user.json
+?? stage-f-results/p0-customer-service/33-sse-order-message.json
+?? stage-f-results/p0-customer-service/34-message-history.json
+?? stage-f-results/p0-customer-service/35-message-history-other-user.json
+?? stage-f-results/p0-customer-service/36-customer-products.json
+?? stage-f-results/p0-customer-service/37-customer-product-detail.json
+?? stage-f-results/p0-customer-service/50-sse-child-logistics-message.json
+?? stage-f-results/p0-store/01-product-create.json
+?? stage-f-results/p0-store/02-product-list-owned.json
+?? stage-f-results/p0-store/03-product-update.json
+?? stage-f-results/p0-store/04-inventory-update.json
+?? stage-f-results/p0-store/05-inventory-negative.json
+?? stage-f-results/p0-store/06-product-off-sale.json
+?? stage-f-results/p0-store/07-product-detail-off-sale.json
+?? stage-f-results/p0-store/08-cart-off-sale.json
+?? stage-f-results/p0-store/09-product-on-sale.json
+?? stage-f-results/p0-store/10-store-list-other-store.json
+?? stage-f-results/p0-store/11-product-update-other-store.json
+?? stage-f-results/p0-store/12-zero-stock-create.json
+?? stage-f-results/p0-store/13-cart-empty.json
+?? stage-f-results/p0-store/14-cart-add.json
+?? stage-f-results/p0-store/15-cart-update.json
+?? stage-f-results/p0-store/16-checkout.json
+?? stage-f-results/p0-store/17-store-orders-owned.json
+?? stage-f-results/p0-store/18-store-orders-other-store.json
+?? stage-f-results/p0-store/19-pay-parent.json
+?? stage-f-results/p0-store/20-pay-child-rejected.json
+?? stage-f-results/p0-store/21-ship-wrong-store.json
+?? stage-f-results/p0-store/22-ship-owned.json
+?? stage-f-results/p0-store/23-ship-repeat.json
+?? stage-f-results/p0-store/24-order-detail-owned.json
+?? stage-f-results/p0-store/25-order-detail-other-user.json
+?? stage-f-results/p0-trade/01-search-live.json
+?? stage-f-results/p0-trade/01-search.json
+?? stage-f-results/p0-trade/02-cart-add.json
+?? stage-f-results/p0-trade/02-product-detail-live.json
+?? stage-f-results/p0-trade/03-cart-empty-live.json
+?? stage-f-results/p0-trade/03-cart-update.json
+?? stage-f-results/p0-trade/04-cart-add-live.json
+?? stage-f-results/p0-trade/04-cart-read.json
+?? stage-f-results/p0-trade/05-cart-update-live.json
+?? stage-f-results/p0-trade/05-checkout.json
+?? stage-f-results/p0-trade/06-cart-read-live.json
+?? stage-f-results/p0-trade/06-order-detail-pending.json
+?? stage-f-results/p0-trade/07-checkout-live.json
+?? stage-f-results/p0-trade/07-pay.json
+?? stage-f-results/p0-trade/08-order-detail-paid.json
+?? stage-f-results/p0-trade/08-parent-detail-pending-live.json
+?? stage-f-results/p0-trade/09-pay-child-rejected-live.json
+?? stage-f-results/p0-trade/10-pay-parent-live.json
+?? stage-f-results/p0-trade/11-pay-parent-repeat-live.json
+?? stage-f-results/p0-trade/12-parent-detail-paid-live.json
+?? stage-f-results/p0-trade/live-order-numbers.json
+?? stage-f-results/p0-trade/order-no.txt
+?? stage-f-results/p1/38-pay-repeat-same-token.json
+?? stage-f-results/p1/39-pay-repeat-different-token.json
+?? stage-f-results/p1/40-cancel-shipped-parent.json
+?? stage-f-results/p1/41-invalid-cart-quantity-zero.json
+?? stage-f-results/p1/42-zero-stock-cart-add.json
+?? stage-f-results/p1/43-zero-stock-checkout.json
+?? stage-f-results/p1/44-empty-cart-checkout.json
+?? stage-f-results/p1/45-cancel-user-cart-add.json
+?? stage-f-results/p1/46-cancel-user-checkout.json
+?? stage-f-results/p1/47-cancel-pending-order.json
+?? stage-f-results/p1/48-cancel-repeat.json
+?? stage-f-results/p1/49-pay-cancelled-order.json
+?? stage-f-results/run-stage-f-live.ps1
+?? stage-f-results/runtime/backend-stage-f-after-fix.err
+?? stage-f-results/runtime/backend-stage-f-after-fix.pid
+?? stage-f-results/runtime/backend-stage-f-live.err
+?? stage-f-results/runtime/backend-stage-f-live.pid
+?? stage-f-results/runtime/backend-stage-f.err
+?? "\351\230\266\346\256\265 F \344\277\256\345\244\215\344\270\223\351\241\271\346\265\213\350\257\225\350\256\241\345\210\222.md"
+?? "\351\230\266\346\256\265 F \350\201\224\350\260\203\344\270\216\351\252\214\346\224\266\350\256\241\345\210\222.md"

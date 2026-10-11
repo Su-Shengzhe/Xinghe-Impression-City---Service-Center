@@ -85,6 +85,14 @@ public class CartService {
         if (deleted == 0) throw new IllegalArgumentException("购物车中不存在该商品");
     }
 
+    /** 清空指定用户的购物车；购物车本来为空时也视为成功。 */
+    @Transactional
+    public void clear(String userId) {
+        String normalizedUserId = requireUser(userId);
+        cartMapper.delete(new LambdaQueryWrapper<CartItem>()
+                .eq(CartItem::getUserId, normalizedUserId));
+    }
+
     /** 按用户和 SKU 查询购物车记录，确保不会读取其他用户的数据。 */
     private CartItem findItem(String userId, Long skuId) {
         CartItem item = cartMapper.selectOne(new LambdaQueryWrapper<CartItem>()

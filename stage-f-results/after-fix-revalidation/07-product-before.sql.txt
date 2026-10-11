@@ -1,0 +1,6 @@
+SQL: SELECT p.id, p.store_id, p.name, p.description, p.price, p.status, p.updated_at, i.available_quantity, i.locked_quantity, i.sold_quantity, i.version, i.updated_at FROM product p LEFT JOIN product_inventory i ON i.sku_id=p.id WHERE p.id=990020;
++--------+----------+-----------------------+-------------------------------------+-------+---------+---------------------+--------------------+-----------------+---------------+---------+---------------------+
+| id     | store_id | name                  | description                         | price | status  | updated_at          | available_quantity | locked_quantity | sold_quantity | version | updated_at          |
++--------+----------+-----------------------+-------------------------------------+-------+---------+---------------------+--------------------+-----------------+---------------+---------+---------------------+
+| 990020 |        1 | Stage F Fix Product A | Stage F repair validation product A | 12.50 | ON_SALE | 2026-10-10 21:05:53 |                  8 |               2 |             0 |       1 | 2026-10-10 21:09:50 |
++--------+----------+-----------------------+-------------------------------------+-------+---------+---------------------+--------------------+-----------------+---------------+---------+---------------------+

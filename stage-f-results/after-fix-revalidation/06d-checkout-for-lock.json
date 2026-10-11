@@ -1,0 +1,9 @@
+{
+  "name": "06d-checkout-for-lock",
+  "method": "Post",
+  "uri": "http://localhost:8082/api/orders/checkout",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":[{\"orderNo\":\"XH17916377907788A1892\",\"status\":\"PENDING_PAYMENT\"},{\"orderNo\":\"XH17916377907825F0A08\",\"status\":\"PENDING_PAYMENT\"}]}"
+}

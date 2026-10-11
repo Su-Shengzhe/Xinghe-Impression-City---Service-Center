@@ -42,6 +42,14 @@ public class ProductQueryService {
         return mapper.selectList(query.last("LIMIT 20"));
     }
 
+    /** 返回单个在售商品详情，用户端不暴露下架商品。 */
+    public Product detail(Long skuId) {
+        if (skuId == null || skuId <= 0) throw new IllegalArgumentException("商品 SKU 必须为正整数");
+        Product product = mapper.selectById(skuId);
+        if (product == null || !"ON_SALE".equals(product.getStatus())) throw new IllegalArgumentException("商品不存在或已下架");
+        return product;
+    }
+
     private Product toProduct(ProductDocument document) {
         Product product = new Product();
         product.setId(document.getSkuId());

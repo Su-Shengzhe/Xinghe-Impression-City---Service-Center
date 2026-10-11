@@ -1,0 +1,7 @@
+{
+  "name": "36-customer-products",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":[{\"id\":990010,\"storeId\":1,\"name\":\"Stage F Fulfillment Item Updated\",\"description\":\"Updated for F2\",\"price\":3.00,\"status\":\"ON_SALE\",\"createdAt\":\"2026-10-10T18:05:25\",\"updatedAt\":\"2026-10-10T18:05:25\"},{\"id\":990011,\"storeId\":1,\"name\":\"Stage F Zero Stock\",\"description\":\"Inventory boundary\",\"price\":1.00,\"status\":\"ON_SALE\",\"createdAt\":\"2026-10-10T18:05:25\",\"updatedAt\":\"2026-10-10T18:05:25\"},{\"id\":990001,\"storeId\":1,\"name\":\"Stage F Test Item\",\"description\":\"Dedicated Stage F isolated test SKU\",\"price\":1.00,\"status\":\"ON_SALE\",\"createdAt\":\"2026-10-10T16:43:30\",\"updatedAt\":\"2026-10-10T16:43:30\"}]}"
+}

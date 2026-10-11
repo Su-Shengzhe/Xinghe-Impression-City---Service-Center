@@ -1,0 +1,7 @@
+{
+  "name": "19-pay-parent",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"orderNo\":\"XH1791626726063AB4FEA\",\"status\":\"PAID\"}}"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "46-cancel-user-checkout",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":[{\"orderNo\":\"XH1791626726935A458AB\",\"status\":\"PENDING_PAYMENT\"},{\"orderNo\":\"XH1791626726937D873B5\",\"status\":\"PENDING_PAYMENT\"}]}"
+}

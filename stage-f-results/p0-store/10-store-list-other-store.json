@@ -1,0 +1,7 @@
+{
+  "name": "10-store-list-other-store",
+  "status": 200,
+  "expected": "200 empty",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":[]}"
+}

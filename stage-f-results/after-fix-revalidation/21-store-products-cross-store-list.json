@@ -1,0 +1,9 @@
+{
+  "name": "21-store-products-cross-store-list",
+  "method": "Get",
+  "uri": "http://localhost:8082/api/store/products",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":[{\"product\":{\"id\":990021,\"storeId\":2,\"name\":\"Stage F Fix Product B\",\"description\":\"Stage F repair validation product B\",\"price\":15.00,\"status\":\"ON_SALE\",\"createdAt\":\"2026-10-10T21:05:53\",\"updatedAt\":\"2026-10-10T21:18:25\"},\"inventory\":{\"skuId\":990021,\"availableQuantity\":10,\"lockedQuantity\":0,\"version\":0,\"soldQuantity\":0,\"updatedAt\":\"2026-10-10T21:05:53\"}}]}"
+}

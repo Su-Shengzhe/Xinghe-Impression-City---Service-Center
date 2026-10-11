@@ -1,0 +1,7 @@
+{
+  "name": "28-customer-logistics-owned",
+  "status": 200,
+  "expected": "200 SHIPPED",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"orderNo\":\"XH1791626726071B5207F\",\"company\":\"StageCarrier\",\"trackingNo\":\"SF-OK-20261010\",\"status\":\"SHIPPED\",\"description\":\"商家已发货\",\"updatedAt\":\"2026-10-10T18:05:26\"}}"
+}

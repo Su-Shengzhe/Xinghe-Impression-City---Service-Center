@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /** 管理店铺商品资料和商品对应的数据库库存。 */
 @Service
@@ -65,7 +66,7 @@ public class ProductManagementService {
 
     /** 修改所属店铺商品资料，不允许通过编辑请求迁移商品店铺或覆盖库存。 */
     @Transactional
-    public Product update(Long storeId, Long skuId, ProductRequest request) {
+    public Product update(Long storeId, Long skuId, ProductUpdateRequest request) {
         Product product = requireOwnedProduct(storeId, skuId);
         validateProductDetails(request);
         product.setName(request.name().trim());
@@ -107,6 +108,17 @@ public class ProductManagementService {
         throw new IllegalStateException("库存并发冲突，请稍后重试");
     }
 
+    /** 查询当前店铺的商品和库存，用于店铺工作台的商品维护页面。 */
+    public List<ProductStockView> list(Long storeId) {
+        requireStore(storeId);
+        return productMapper.selectList(new LambdaQueryWrapper<Product>()
+                        .eq(Product::getStoreId, storeId)
+                        .orderByDesc(Product::getUpdatedAt))
+                .stream()
+                .map(product -> new ProductStockView(product, inventoryMapper.selectById(product.getId())))
+                .toList();
+    }
+
     /** 校验店铺有效，避免商品被创建到不存在或停业店铺。 */
     private void requireStore(Long storeId) {
         if (storeId == null || storeId <= 0) throw new IllegalArgumentException("店铺 ID 必须为正整数");
@@ -132,8 +144,18 @@ public class ProductManagementService {
     /** 校验商品新增和编辑共同使用的 SKU、名称及价格字段。 */
     private void validateProductDetails(ProductRequest request) {
         if (request == null || request.skuId() == null || request.skuId() <= 0) throw new IllegalArgumentException("商品 SKU 必须为正整数");
-        if (request.name() == null || request.name().isBlank() || request.name().trim().length() > 200) throw new IllegalArgumentException("商品名称不能为空且不能超过 200 个字符");
-        if (request.price() == null || request.price().signum() < 0 || request.price().scale() > 2) throw new IllegalArgumentException("商品价格必须为非负两位小数");
+        validateProductDetails(request.name(), request.price());
+    }
+
+    /** 校验商品名称和价格字段。 */
+    private void validateProductDetails(ProductUpdateRequest request) {
+        if (request == null) throw new IllegalArgumentException("商品资料不能为空");
+        validateProductDetails(request.name(), request.price());
+    }
+
+    private void validateProductDetails(String name, java.math.BigDecimal price) {
+        if (name == null || name.isBlank() || name.trim().length() > 200) throw new IllegalArgumentException("商品名称不能为空且不能超过 200 个字符");
+        if (price == null || price.signum() < 0 || price.scale() > 2) throw new IllegalArgumentException("商品价格必须为非负两位小数");
     }
 
     private void recordIndexEvent(Long skuId) {
@@ -143,4 +165,9 @@ public class ProductManagementService {
     /** 商品资料及创建时的初始可用库存。 */
     public record ProductRequest(Long skuId, String name, String description, java.math.BigDecimal price,
                                  Integer availableQuantity) {}
+
+    /** 商品编辑资料，不包含创建时才需要的 SKU 和初始库存。 */
+    public record ProductUpdateRequest(String name, String description, java.math.BigDecimal price) {}
+
+    public record ProductStockView(Product product, ProductInventory inventory) {}
 }

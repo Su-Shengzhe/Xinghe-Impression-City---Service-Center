@@ -1,0 +1,7 @@
+{
+  "name": "33-sse-order-message",
+  "status": 200,
+  "expected": "200 message+complete",
+  "contentType": "text/event-stream",
+  "content": "event:message\ndata:{\"messageId\":\"4a13d735a61440918be910ac7f4efbba\",\"sessionId\":\"6ad05bc7e81f41889178ecd96839f6c0\",\"messageType\":\"ASSISTANT\",\"intent\":\"LOGISTICS_QUERY\",\"content\":\"物流信息尚未同步\",\"createdAt\":\"2026-10-10T18:05:26.6196992\"}\n\nevent:complete\ndata:DONE\n\n"
+}

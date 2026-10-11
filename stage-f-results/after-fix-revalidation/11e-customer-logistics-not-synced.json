@@ -1,0 +1,9 @@
+{
+  "name": "11e-customer-logistics-not-synced",
+  "method": "Get",
+  "uri": "http://localhost:8082/api/customer-service/orders/XH17916381101855415EA/logistics",
+  "status": 200,
+  "expected": "200 NOT_SYNCED",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"orderNo\":\"XH17916381101855415EA\",\"company\":null,\"trackingNo\":null,\"status\":\"NOT_SYNCED\",\"description\":\"物流信息尚未同步\",\"updatedAt\":null}}"
+}

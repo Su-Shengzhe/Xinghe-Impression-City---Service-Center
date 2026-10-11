@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -49,10 +50,39 @@ class ProductManagementServiceTest {
         when(products.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
         ProductManagementService service = new ProductManagementService(products, stores, mock(ProductInventoryMapper.class));
 
-        assertThatThrownBy(() -> service.update(5L, 100L, new ProductManagementService.ProductRequest(
-                100L, "商品", "描述", new BigDecimal("12.50"), 0)))
+        assertThatThrownBy(() -> service.update(5L, 100L, new ProductManagementService.ProductUpdateRequest(
+                "商品", "描述", new BigDecimal("12.50"))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("店铺商品不存在");
         verify(products, never()).updateById(any(Product.class));
+    }
+
+    /** 确认商品编辑只更新资料，不使用占位库存覆盖现有库存。 */
+    @Test
+    void updatesProductDetailsWithoutTouchingInventory() {
+        ProductMapper products = mock(ProductMapper.class);
+        StoreMapper stores = mock(StoreMapper.class);
+        ProductInventoryMapper inventory = mock(ProductInventoryMapper.class);
+        Store store = new Store();
+        store.setId(5L);
+        store.setStatus("OPEN");
+        Product product = new Product();
+        product.setId(100L);
+        product.setStoreId(5L);
+        product.setName("旧商品");
+        product.setPrice(new BigDecimal("10.00"));
+        when(stores.selectById(5L)).thenReturn(store);
+        when(products.selectOne(any(LambdaQueryWrapper.class))).thenReturn(product);
+        when(products.updateById(any(Product.class))).thenReturn(1);
+
+        ProductManagementService service = new ProductManagementService(products, stores, inventory);
+        service.update(5L, 100L, new ProductManagementService.ProductUpdateRequest(
+                "新商品", "新描述", new BigDecimal("12.50")));
+
+        assertThat(product.getName()).isEqualTo("新商品");
+        assertThat(product.getDescription()).isEqualTo("新描述");
+        assertThat(product.getPrice()).isEqualByComparingTo("12.50");
+        verify(products).updateById(product);
+        verifyNoInteractions(inventory);
     }
 }

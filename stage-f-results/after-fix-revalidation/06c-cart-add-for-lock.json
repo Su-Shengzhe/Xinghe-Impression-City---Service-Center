@@ -1,0 +1,9 @@
+{
+  "name": "06c-cart-add-for-lock",
+  "method": "Post",
+  "uri": "http://localhost:8082/api/cart/items",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"skuId\":990020,\"productName\":\"Stage F Fix Product A\",\"storeId\":1,\"unitPrice\":12.50,\"quantity\":2,\"lineAmount\":25.00}}"
+}

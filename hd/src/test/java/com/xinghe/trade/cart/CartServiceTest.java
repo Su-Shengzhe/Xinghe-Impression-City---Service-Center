@@ -97,6 +97,19 @@ class CartServiceTest {
                 .hasMessage("购物车中不存在该商品");
     }
 
+    /** 验证清空购物车仅删除当前用户的购物车记录。 */
+    @Test
+    void clearsOnlyCurrentUserCart() {
+        CartItemMapper cartMapper = mock(CartItemMapper.class);
+        ProductMapper productMapper = mock(ProductMapper.class);
+        CartService service = new CartService(cartMapper, productMapper);
+
+        service.clear(" user-1 ");
+
+        verify(cartMapper).delete(any(LambdaQueryWrapper.class));
+        verifyNoInteractions(productMapper);
+    }
+
     /** 构造测试使用的商品数据。 */
     private Product product(String status, String price) {
         Product product = new Product();

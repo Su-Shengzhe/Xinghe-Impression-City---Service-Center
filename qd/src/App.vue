@@ -6,6 +6,7 @@ import {
   Bot,
   Check,
   ChevronDown,
+  CirclePlus,
   CircleHelp,
   ClipboardList,
   Clock3,
@@ -19,9 +20,11 @@ import {
   Plus,
   Search,
   Send,
+  ShoppingCart,
   ShoppingBag,
   Sparkles,
   Store,
+  Trash2,
   Truck,
   UserRound,
   X,
@@ -42,6 +45,21 @@ const isCreatingSession = ref(false)
 const notice = ref('')
 const noticeKind = ref('error')
 const activeTool = ref('order')
+const workspaceMode = ref('service')
+const cart = ref([])
+const cartQuantityDrafts = ref({})
+const customerOrders = ref([])
+const selectedOrder = ref(null)
+const orderLookup = ref('')
+const commerceProducts = ref([])
+const commerceKeyword = ref('')
+const commerceLoading = ref(false)
+const storeId = ref(localStorage.getItem('xinghe:store-id') || '1')
+const storeProducts = ref([])
+const storeOrders = ref([])
+const storeLoading = ref(false)
+const newProduct = ref({ skuId: '', name: '', description: '', price: '', availableQuantity: 0 })
+const shipmentDrafts = ref({})
 const orderNo = ref('')
 const productKeyword = ref('')
 const orderResult = ref(null)
@@ -118,6 +136,208 @@ async function apiGet(url) {
   // 使用当前联调用户身份调用只读查询接口。
   const response = await fetch(url, { headers: headers() })
   return readApiResponse(response)
+}
+
+function storeHeaders(extra = {}) {
+  return { 'X-Store-Id': storeId.value.trim(), ...extra }
+}
+
+async function apiRequest(url, { method = 'GET', body, headers: extra = {} } = {}, identity = 'user') {
+  const requestHeaders = identity === 'store' ? storeHeaders(extra) : headers(extra)
+  if (body !== undefined) requestHeaders['Content-Type'] = 'application/json'
+  return readApiResponse(await fetch(url, {
+    method,
+    headers: requestHeaders,
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  }))
+}
+
+async function loadCart() {
+  const rows = await apiGet('/api/cart')
+  cart.value = rows
+  cartQuantityDrafts.value = rows.reduce((drafts, line) => {
+    drafts[line.skuId] = line.quantity
+    return drafts
+  }, {})
+}
+
+async function loadCustomerOrders(orderNoToLoad = '') {
+  if (orderNoToLoad.trim()) {
+    selectedOrder.value = await apiGet(`/api/orders/${encodeURIComponent(orderNoToLoad.trim())}`)
+    return
+  }
+  selectedOrder.value = null
+}
+
+async function loadCommerceProducts() {
+  commerceLoading.value = true
+  try {
+    const query = new URLSearchParams()
+    if (commerceKeyword.value.trim()) query.set('keyword', commerceKeyword.value.trim())
+    commerceProducts.value = await apiGet(`/api/customer-service/products${query.size ? `?${query}` : ''}`)
+  } catch (error) {
+    showNotice(`商品读取失败：${error.message}`)
+  } finally {
+    commerceLoading.value = false
+  }
+}
+
+async function loadStoreWorkspace() {
+  if (!storeId.value.trim() || !/^\d+$/.test(storeId.value.trim())) {
+    showNotice('请输入有效的店铺 ID')
+    return
+  }
+  localStorage.setItem('xinghe:store-id', storeId.value.trim())
+  storeLoading.value = true
+  try {
+    const [productRows, orderRows] = await Promise.all([
+      apiRequest('/api/store/products', {}, 'store'),
+      apiRequest('/api/orders/store', {}, 'store'),
+    ])
+    shipmentDrafts.value = orderRows.reduce((drafts, entry) => {
+      const orderNoValue = entry.order.orderNo
+      drafts[orderNoValue] = shipmentDrafts.value[orderNoValue] || { company: '', trackingNo: '' }
+      return drafts
+    }, {})
+    storeProducts.value = productRows
+    storeOrders.value = orderRows
+  } catch (error) {
+    showNotice(`店铺数据读取失败：${error.message}`)
+  } finally {
+    storeLoading.value = false
+  }
+}
+
+async function runCommerce(action, successMessage) {
+  try {
+    await action()
+    if (successMessage) showNotice(successMessage, 'success')
+    return true
+  } catch (error) {
+    showNotice(error.message)
+    return false
+  }
+}
+
+async function addToCart(skuId) {
+  await runCommerce(async () => {
+    await apiRequest('/api/cart/items', { method: 'POST', body: { skuId, quantity: 1 } })
+    await loadCart()
+  }, '已加入购物车')
+}
+
+async function setCartQuantity(line, quantity) {
+  const succeeded = await runCommerce(async () => {
+    if (quantity < 1) await apiRequest(`/api/cart/items/${line.skuId}`, { method: 'DELETE' })
+    else await apiRequest(`/api/cart/items/${line.skuId}`, { method: 'PUT', body: { quantity } })
+    await loadCart()
+  })
+  if (!succeeded) cartQuantityDrafts.value[line.skuId] = line.quantity
+}
+
+async function submitCartQuantity(line) {
+  const quantity = Number(cartQuantityDrafts.value[line.skuId])
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
+    cartQuantityDrafts.value[line.skuId] = line.quantity
+    showNotice('商品数量必须是 1 到 99 的整数')
+    return
+  }
+  await setCartQuantity(line, quantity)
+}
+
+async function removeFromCart(line) {
+  await runCommerce(async () => {
+    await apiRequest(`/api/cart/items/${line.skuId}`, { method: 'DELETE' })
+    await loadCart()
+  }, '商品已从购物车移除')
+}
+
+async function clearCart() {
+  if (!window.confirm('确定要清空购物车吗？')) return
+  await runCommerce(async () => {
+    await apiRequest('/api/cart', { method: 'DELETE' })
+    await loadCart()
+  }, '购物车已清空')
+}
+
+async function checkoutCart() {
+  await runCommerce(async () => {
+    const orders = await apiRequest('/api/orders/checkout', {
+      method: 'POST',
+      headers: { 'Idempotency-Token': `checkout-${crypto.randomUUID()}` },
+    })
+    const parent = orders.find((item) => !item.parentOrderNo) || orders[0]
+    await loadCart()
+    await loadCustomerOrders(parent?.orderNo || '')
+    showNotice('结算完成，订单待支付', 'success')
+  })
+}
+
+async function payOrder(orderNoValue) {
+  await runCommerce(async () => {
+    await apiRequest(`/api/orders/${encodeURIComponent(orderNoValue)}/pay`, {
+      method: 'POST',
+      headers: { 'Idempotency-Token': `pay-${crypto.randomUUID()}` },
+    })
+    await loadCustomerOrders(orderNoValue)
+    showNotice('支付成功', 'success')
+  })
+}
+
+async function cancelOrder(orderNoValue) {
+  await runCommerce(async () => {
+    await apiRequest(`/api/orders/${encodeURIComponent(orderNoValue)}/cancel`, { method: 'POST' })
+    await loadCustomerOrders(orderNoValue)
+    showNotice('订单已取消', 'success')
+  })
+}
+
+async function saveInventory(product) {
+  await runCommerce(async () => {
+    await apiRequest(`/api/store/products/${product.product.id}/inventory`, {
+      method: 'PUT', body: { availableQuantity: Number(product.inventory.availableQuantity) },
+    }, 'store')
+    await loadStoreWorkspace()
+    showNotice('库存已更新', 'success')
+  })
+}
+
+async function toggleProduct(product) {
+  await runCommerce(async () => {
+    const status = product.product.status === 'ON_SALE' ? 'OFF_SALE' : 'ON_SALE'
+    await apiRequest(`/api/store/products/${product.product.id}/status`, { method: 'PUT', body: { status } }, 'store')
+    await loadStoreWorkspace()
+  }, '商品状态已更新')
+}
+
+async function createStoreProduct() {
+  await runCommerce(async () => {
+    const product = { ...newProduct.value, skuId: Number(newProduct.value.skuId), price: Number(newProduct.value.price), availableQuantity: Number(newProduct.value.availableQuantity) }
+    await apiRequest('/api/store/products', { method: 'POST', body: product }, 'store')
+    newProduct.value = { skuId: '', name: '', description: '', price: '', availableQuantity: 0 }
+    await loadStoreWorkspace()
+    showNotice('商品已创建', 'success')
+  })
+}
+
+async function shipStoreOrder(order) {
+  const draft = shipmentDrafts.value[order.orderNo] || {}
+  await runCommerce(async () => {
+    await apiRequest(`/api/orders/${encodeURIComponent(order.orderNo)}/ship`, {
+      method: 'POST', body: { company: draft.company || '', trackingNo: draft.trackingNo || '' },
+    }, 'store')
+    await loadStoreWorkspace()
+    showNotice('订单已发货', 'success')
+  })
+}
+
+function setWorkspaceMode(mode) {
+  workspaceMode.value = mode
+  if (mode === 'commerce') {
+    loadCart()
+    loadCommerceProducts()
+  }
+  if (mode === 'store') loadStoreWorkspace()
 }
 
 async function createSession() {
@@ -551,10 +771,19 @@ onMounted(async () => {
       </div>
 
       <div class="workspace-label">服务台</div>
-      <button class="nav-item nav-item-active" type="button">
+      <button class="nav-item" :class="{ 'nav-item-active': workspaceMode === 'service' }" type="button" @click="setWorkspaceMode('service')">
         <MessagesSquare :size="18" />
         <span>客服工作台</span>
-        <span class="nav-live-dot"></span>
+        <span v-if="workspaceMode === 'service'" class="nav-live-dot"></span>
+      </button>
+      <button class="nav-item" :class="{ 'nav-item-active': workspaceMode === 'commerce' }" type="button" @click="setWorkspaceMode('commerce')">
+        <ShoppingCart :size="18" />
+        <span>顾客交易</span>
+        <span v-if="cart.length" class="nav-count">{{ cart.length }}</span>
+      </button>
+      <button class="nav-item" :class="{ 'nav-item-active': workspaceMode === 'store' }" type="button" @click="setWorkspaceMode('store')">
+        <Store :size="18" />
+        <span>店铺工作台</span>
       </button>
 
       <div class="session-section-head">
@@ -618,7 +847,7 @@ onMounted(async () => {
         <button class="icon-button icon-button-small" type="button" aria-label="关闭提示" @click="notice = ''"><X :size="15" /></button>
       </div>
 
-      <div class="conversation-heading">
+      <div v-if="workspaceMode === 'service'" class="conversation-heading">
         <div class="conversation-title-group">
           <div class="conversation-icon"><Headphones :size="18" /></div>
           <div class="conversation-title-copy">
@@ -641,7 +870,71 @@ onMounted(async () => {
         </div>
       </div>
 
-      <section ref="messageList" class="message-list" tabindex="0" aria-live="polite" aria-label="客服消息，可滚动查看历史内容" @scroll="updateScrollButton">
+      <section v-if="workspaceMode === 'commerce'" class="commerce-panel">
+        <div class="commerce-toolbar">
+          <div><h1>顾客交易</h1><p>{{ userId }} · {{ cart.length }} 件购物车商品</p></div>
+          <button class="lookup-secondary" type="button" :disabled="commerceLoading" @click="loadCart(); loadCommerceProducts()"><LoaderCircle v-if="commerceLoading" class="spin" :size="15" /><Search v-else :size="15" />刷新</button>
+        </div>
+        <div class="commerce-layout">
+          <section class="commerce-section">
+            <div class="commerce-section-heading"><h2>商品</h2><form class="commerce-search" @submit.prevent="loadCommerceProducts"><input v-model="commerceKeyword" aria-label="搜索商品" placeholder="搜索在售商品"><button class="icon-button icon-button-small" aria-label="搜索" type="submit"><Search :size="15" /></button></form></div>
+            <div v-if="commerceLoading" class="commerce-empty"><LoaderCircle class="spin" :size="18" />正在读取</div>
+            <div v-else-if="!commerceProducts.length" class="commerce-empty">没有匹配的在售商品</div>
+            <article v-for="product in commerceProducts" :key="product.id" class="commerce-product">
+              <div class="commerce-item-icon"><ShoppingBag :size="17" /></div>
+              <div class="commerce-product-copy"><strong>{{ product.name }}</strong><span>SKU {{ product.id }} · 店铺 {{ product.storeId }}</span><small>{{ product.description || '暂无商品描述' }}</small></div>
+              <div class="commerce-product-action"><b>¥{{ product.price }}</b><button class="lookup-primary" type="button" @click="addToCart(product.id)"><CirclePlus :size="14" />加入</button></div>
+            </article>
+          </section>
+          <section class="commerce-section">
+            <div class="commerce-section-heading"><h2>购物车</h2><strong class="section-count">{{ cart.length }}</strong></div>
+            <div v-if="!cart.length" class="commerce-empty">购物车为空</div>
+            <article v-for="line in cart" :key="line.skuId" class="cart-line">
+              <div class="commerce-product-copy"><strong>{{ line.productName }}</strong><span>SKU {{ line.skuId }} · ¥{{ line.unitPrice }} / 件</span></div>
+              <div class="quantity-control"><button type="button" :aria-label="`减少${line.productName}数量`" :disabled="line.quantity <= 1" @click="setCartQuantity(line, line.quantity - 1)">−</button><input v-model="cartQuantityDrafts[line.skuId]" class="quantity-input" type="number" min="1" max="99" step="1" :aria-label="`输入${line.productName}数量`" title="请输入 1 到 99 的整数" @change="submitCartQuantity(line)" @keydown.enter.prevent="$event.target.blur()" /><button type="button" :aria-label="`增加${line.productName}数量`" :disabled="line.quantity >= 99" @click="setCartQuantity(line, line.quantity + 1)">+</button></div>
+              <div class="cart-line-actions"><b>¥{{ line.lineAmount }}</b><button class="cart-remove-button" type="button" :aria-label="`删除${line.productName}`" title="删除商品" @click="removeFromCart(line)"><Trash2 :size="14" /></button></div>
+            </article>
+            <div v-if="cart.length" class="cart-summary"><button class="cart-clear-button" type="button" @click="clearCart">一键清空全部商品</button><span>合计</span><strong>¥{{ cart.reduce((sum, line) => sum + Number(line.lineAmount), 0).toFixed(2) }}</strong><button class="lookup-primary" type="button" @click="checkoutCart">结算</button></div>
+          </section>
+          <section class="commerce-section order-detail-section">
+            <div class="commerce-section-heading"><h2>订单详情</h2><form class="commerce-search" @submit.prevent="loadCustomerOrders(orderLookup)"><input v-model="orderLookup" aria-label="订单编号" placeholder="输入订单编号"><button class="icon-button icon-button-small" aria-label="查询订单" type="submit"><Search :size="15" /></button></form></div>
+            <div v-if="selectedOrder" class="order-detail">
+              <strong class="order-number">{{ selectedOrder.order.orderNo }}</strong><span class="result-status">{{ statusLabel(selectedOrder.order.status) }}</span>
+              <div class="detail-subheading">店铺订单</div>
+              <article v-for="child in selectedOrder.childOrders" :key="child.orderNo" class="order-child"><strong>{{ child.orderNo }}</strong><span>{{ statusLabel(child.status) }} · ¥{{ child.amount }}</span></article>
+              <div v-if="selectedOrder.items?.length" class="detail-subheading">商品明细</div>
+              <article v-for="item in selectedOrder.items" :key="`${item.orderNo}-${item.skuId}`" class="order-child"><span>SKU {{ item.skuId }} × {{ item.quantity }}</span><strong>¥{{ item.lineAmount }}</strong></article>
+              <div class="order-actions" v-if="selectedOrder.order.status === 'PENDING_PAYMENT'"><button class="lookup-primary" type="button" @click="payOrder(selectedOrder.order.orderNo)">支付订单</button><button class="lookup-secondary" type="button" @click="cancelOrder(selectedOrder.order.orderNo)">取消订单</button></div>
+            </div>
+            <div v-else class="commerce-empty">结算后可查看订单，或输入订单编号查询</div>
+          </section>
+        </div>
+      </section>
+
+      <section v-else-if="workspaceMode === 'store'" class="commerce-panel store-panel">
+        <div class="commerce-toolbar">
+          <div><h1>店铺工作台</h1><p>商品库存、订单与物流管理</p></div>
+          <div class="store-toolbar-actions"><label>店铺 ID<input v-model="storeId" inputmode="numeric" aria-label="店铺 ID"></label><button class="lookup-secondary" type="button" :disabled="storeLoading" @click="loadStoreWorkspace"><LoaderCircle v-if="storeLoading" class="spin" :size="15" /><Search v-else :size="15" />刷新</button></div>
+        </div>
+        <section class="commerce-section store-create-section">
+          <div class="commerce-section-heading"><h2>新增商品</h2></div>
+          <form class="product-create-form" @submit.prevent="createStoreProduct">
+            <label>SKU<input v-model="newProduct.skuId" type="number" min="1" required></label><label>商品名称<input v-model="newProduct.name" required maxlength="120"></label><label>描述<input v-model="newProduct.description" maxlength="500"></label><label>价格<input v-model="newProduct.price" type="number" min="0" step="0.01" required></label><label>可用库存<input v-model="newProduct.availableQuantity" type="number" min="0" required></label><button class="lookup-primary" type="submit"><Plus :size="14" />创建商品</button>
+          </form>
+        </section>
+        <div class="store-content-grid">
+          <section class="commerce-section"><div class="commerce-section-heading"><h2>商品与库存</h2><strong class="section-count">{{ storeProducts.length }}</strong></div>
+            <div v-if="!storeProducts.length" class="commerce-empty">暂无商品</div>
+            <article v-for="entry in storeProducts" :key="entry.product.id" class="store-product-row"><div class="commerce-product-copy"><strong>{{ entry.product.name }}</strong><span>SKU {{ entry.product.id }} · {{ statusLabel(entry.product.status) }}</span><small>锁定 {{ entry.inventory.lockedQuantity }} · 已售 {{ entry.inventory.soldQuantity }}</small></div><label class="inventory-input">可用<input v-model.number="entry.inventory.availableQuantity" type="number" min="0"></label><button class="lookup-secondary" type="button" @click="saveInventory(entry)">保存</button><button class="lookup-secondary" type="button" @click="toggleProduct(entry)">{{ entry.product.status === 'ON_SALE' ? '下架' : '上架' }}</button></article>
+          </section>
+          <section class="commerce-section"><div class="commerce-section-heading"><h2>店铺订单</h2><strong class="section-count">{{ storeOrders.length }}</strong></div>
+            <div v-if="!storeOrders.length" class="commerce-empty">暂无店铺订单</div>
+            <article v-for="entry in storeOrders" :key="entry.order.orderNo" class="store-order-row"><div class="store-order-heading"><strong>{{ entry.order.orderNo }}</strong><span class="result-status">{{ statusLabel(entry.order.status) }}</span></div><div class="store-order-meta">店铺 {{ entry.order.storeId }} · ¥{{ entry.order.amount }} · {{ entry.order.userId }}</div><div v-if="entry.logistics" class="store-order-meta">{{ entry.logistics.company }} · {{ entry.logistics.trackingNo }}</div><form v-else-if="entry.order.status === 'PAID'" class="shipment-form" @submit.prevent="shipStoreOrder(entry.order)"><input v-model="shipmentDrafts[entry.order.orderNo].company" placeholder="承运商" required><input v-model="shipmentDrafts[entry.order.orderNo].trackingNo" placeholder="运单号" required><button class="lookup-primary" type="submit"><Truck :size="14" />发货</button></form></article>
+          </section>
+        </div>
+      </section>
+
+      <section v-if="workspaceMode === 'service'" ref="messageList" class="message-list" tabindex="0" aria-live="polite" aria-label="客服消息，可滚动查看历史内容" @scroll="updateScrollButton">
         <div v-if="isLoadingHistory" class="loading-history"><LoaderCircle class="spin" :size="18" />正在加载会话</div>
         <template v-else-if="messages.length">
           <div class="day-divider"><span>当前会话</span></div>
@@ -679,7 +972,7 @@ onMounted(async () => {
       </section>
 
       <button
-        v-if="showScrollToBottom"
+        v-if="workspaceMode === 'service' && showScrollToBottom"
         class="scroll-to-bottom"
         type="button"
         aria-label="回到底部"
@@ -689,7 +982,7 @@ onMounted(async () => {
         <ChevronDown :size="17" />
       </button>
 
-      <footer class="composer-area">
+      <footer v-if="workspaceMode === 'service'" class="composer-area">
         <div class="composer-wrap">
           <textarea
             v-model="draft"

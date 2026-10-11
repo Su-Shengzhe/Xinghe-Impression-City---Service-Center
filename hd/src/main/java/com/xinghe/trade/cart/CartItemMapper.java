@@ -34,7 +34,4 @@ public interface CartItemMapper extends BaseMapper<CartItem> {
                     @Param("skuId") Long skuId,
                     @Param("quantity") int quantity);
 
-    /** 结算成功后仅删除当前用户的购物车记录。 */
-    @Delete("DELETE FROM cart_item WHERE user_id = #{userId}")
-    int deleteAllByUserId(@Param("userId") String userId);
 }

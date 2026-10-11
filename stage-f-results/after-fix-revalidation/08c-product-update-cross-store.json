@@ -1,0 +1,9 @@
+{
+  "name": "08c-product-update-cross-store",
+  "method": "Put",
+  "uri": "http://localhost:8082/api/store/products/990020",
+  "status": 400,
+  "expected": "400",
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"店铺商品不存在\",\"data\":null}"
+}

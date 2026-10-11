@@ -27,6 +27,13 @@ public class CartController {
         return ApiResponse.ok(cartService.list(userId));
     }
 
+    /** 清空当前用户购物车中的全部商品项。 */
+    @DeleteMapping
+    public ApiResponse<Void> clear(@RequestHeader("X-User-Id") String userId) {
+        cartService.clear(userId);
+        return ApiResponse.ok(null);
+    }
+
     /** 添加商品；重复添加同一 SKU 时由服务端累加数量。 */
     @PostMapping("/items")
     public ApiResponse<CartService.CartLine> add(@RequestHeader("X-User-Id") String userId,

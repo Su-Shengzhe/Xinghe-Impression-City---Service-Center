@@ -81,11 +81,18 @@ cd hd
 mvn -s maven-settings.xml spring-boot:run
 ```
 
-本地未启动 RabbitMQ 时，应用默认不会启动订单超时消费者，因此不会反复打印连接失败日志。需要启用 RabbitMQ 订单超时取消功能时，先启动 RabbitMQ，再设置：
+本地未启动 RabbitMQ 时，应用默认不会启动订单超时消费者，因此不会反复打印连接失败日志。需要启用 RabbitMQ 阶段 E 消息功能时，必须先启动 RabbitMQ，并在**同一个启动终端**明确设置与隔离数据库同名的 vhost；不要省略此项，否则会连接默认 `/` vhost：
 
 ```powershell
+$env:MYSQL_DATABASE = "xinghe_stage_e"
+$env:SPRING_RABBITMQ_VIRTUAL_HOST = "xinghe_stage_e"
 $env:XINGHE_MESSAGING_ENABLED = "true"
+$env:XINGHE_ELASTICSEARCH_ENABLED = "true" # 仅在 ES 已运行且安装 IK 插件时启用
+cd hd
+mvn -s maven-settings.xml spring-boot:run
 ```
+
+验收环境须使用专用数据库和同名 RabbitMQ vhost（例如 `xinghe_stage_e`），先确认该 vhost/队列为空或已知，再启动应用。不可对 `xinghe_trade` 或其他用例库执行清理/重置。首次换库时先确认 Flyway V1–V3 均成功，并在目标库准备营业店铺和测试商品；应用创建商品接口应返回成功后，再进行消息场景验收。记录被测 commit、数据库/vhost、环境开关、HTTP 响应、`message_outbox`/`message_processing` 查询结果以及 RabbitMQ 队列参数/消息数。
 
 阶段 E 的可靠消息链路使用 `message_outbox` 和 `message_processing` 两张表：订单超时与商品索引事件先和业务事务一起写入 Outbox，再由后台发布器以持久消息和 publisher confirm 发布。消费者按 `message_id` 幂等处理；失败消息经过两级延迟重试后进入 `xinghe.business.dead`，发布器自身失败达到 10 次时在 Outbox 标记为 `DEAD`。应用重启会回收滞留的 `PUBLISHING` 事件。
 
@@ -95,7 +102,7 @@ $env:XINGHE_MESSAGING_ENABLED = "true"
 $env:XINGHE_ELASTICSEARCH_ENABLED = "true"
 ```
 
-商品管理的创建、资料更新和上下架会在同一事务写入 `product.index` 事件；ES 不可用时客服商品查询自动回退 MySQL。索引可重复重建：
+商品管理的创建、资料更新和上下架会在同一事务写入 `product.index` 事件；ES 不可用时客服商品查询自动回退 MySQL。商品索引文档使用 `ik_max_word`/`ik_smart` 分词器，因此 ES 必须安装 IK 插件才能创建索引。索引可重复重建：
 
 ```http
 POST /api/store/products/rebuild-index

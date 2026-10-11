@@ -1,0 +1,9 @@
+{
+  "name": "10d-pay-second-parent",
+  "method": "Post",
+  "uri": "http://localhost:8082/api/orders/XH1791638110182D52A1F/pay",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"orderNo\":\"XH1791638110182D52A1F\",\"status\":\"PAID\"}}"
+}

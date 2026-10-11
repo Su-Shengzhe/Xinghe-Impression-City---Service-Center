@@ -1,0 +1,7 @@
+{
+  "name": "17-store-orders-owned",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":[{\"order\":{\"orderNo\":\"XH1791626726071B5207F\",\"parentOrderNo\":\"XH1791626726063AB4FEA\",\"userId\":\"stage-f-p0-user-20261010\",\"storeId\":1,\"skuId\":null,\"quantity\":null,\"amount\":3.00,\"status\":\"PENDING_PAYMENT\",\"createdAt\":\"2026-10-10T18:05:26\",\"updatedAt\":\"2026-10-10T18:05:26\"},\"logistics\":null},{\"order\":{\"orderNo\":\"XH1791625044453CEFE06\",\"parentOrderNo\":\"XH1791625044448A50801\",\"userId\":\"stage-f-live-user-20261010\",\"storeId\":1,\"skuId\":null,\"quantity\":null,\"amount\":1.00,\"status\":\"PAID\",\"createdAt\":\"2026-10-10T17:37:24\",\"updatedAt\":\"2026-10-10T17:37:25\"},\"logistics\":null},{\"order\":{\"orderNo\":\"XH1791621885425208A35\",\"parentOrderNo\":\"XH17916218854173FB41B\",\"userId\":\"stage-f-user-01\",\"storeId\":1,\"skuId\":null,\"quantity\":null,\"amount\":2.00,\"status\":\"PAID\",\"createdAt\":\"2026-10-10T16:44:45\",\"updatedAt\":\"2026-10-10T16:44:45\"},\"logistics\":null}]}"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "05-inventory-negative",
+  "status": 500,
+  "expected": "400",
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"服务器内部错误\",\"data\":null}"
+}

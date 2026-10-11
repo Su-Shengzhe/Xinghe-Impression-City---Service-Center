@@ -1,0 +1,9 @@
+{
+  "name": "11-store-orders-empty",
+  "method": "Get",
+  "uri": "http://localhost:8082/api/orders/store",
+  "status": 200,
+  "expected": "200 empty",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":[]}"
+}

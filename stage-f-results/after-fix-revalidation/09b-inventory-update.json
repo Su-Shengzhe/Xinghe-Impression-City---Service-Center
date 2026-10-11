@@ -1,0 +1,9 @@
+{
+  "name": "09b-inventory-update",
+  "method": "Put",
+  "uri": "http://localhost:8082/api/store/products/990020/inventory",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"skuId\":990020,\"availableQuantity\":7,\"lockedQuantity\":2,\"version\":2,\"soldQuantity\":0,\"updatedAt\":\"2026-10-10T21:09:51\"}}"
+}

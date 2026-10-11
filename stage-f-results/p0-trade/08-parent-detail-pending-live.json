@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"order\":{\"orderNo\":\"XH1791625044448A50801\",\"parentOrderNo\":null,\"userId\":\"stage-f-live-user-20261010\",\"storeId\":null,\"skuId\":null,\"quantity\":null,\"amount\":1.00,\"status\":\"PENDING_PAYMENT\",\"createdAt\":\"2026-10-10T17:37:24\",\"updatedAt\":\"2026-10-10T17:37:24\"},\"childOrders\":[{\"orderNo\":\"XH1791625044453CEFE06\",\"parentOrderNo\":\"XH1791625044448A50801\",\"userId\":\"stage-f-live-user-20261010\",\"storeId\":1,\"skuId\":null,\"quantity\":null,\"amount\":1.00,\"status\":\"PENDING_PAYMENT\",\"createdAt\":\"2026-10-10T17:37:24\",\"updatedAt\":\"2026-10-10T17:37:24\"}],\"items\":[{\"id\":3,\"orderNo\":\"XH1791625044453CEFE06\",\"skuId\":990001,\"quantity\":1,\"unitPrice\":1.00,\"lineAmount\":1.00}]}}"
+}

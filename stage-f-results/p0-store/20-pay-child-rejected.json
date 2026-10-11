@@ -1,0 +1,7 @@
+{
+  "name": "20-pay-child-rejected",
+  "status": 409,
+  "expected": "409",
+  "contentType": "application/json",
+  "content": "{\"code\":-1,\"message\":\"请支付父订单\",\"data\":null}"
+}

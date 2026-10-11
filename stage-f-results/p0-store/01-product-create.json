@@ -1,0 +1,7 @@
+{
+  "name": "01-product-create",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"id\":990010,\"storeId\":1,\"name\":\"Stage F Fulfillment Item\",\"description\":\"Stage F fulfillment evidence\",\"price\":2.5,\"status\":\"ON_SALE\",\"createdAt\":\"2026-10-10T18:05:24.7688163\",\"updatedAt\":\"2026-10-10T18:05:24.7688163\"}}"
+}

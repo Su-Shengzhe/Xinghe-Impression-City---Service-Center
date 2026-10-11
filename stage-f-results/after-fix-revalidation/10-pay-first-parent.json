@@ -1,0 +1,9 @@
+{
+  "name": "10-pay-first-parent",
+  "method": "Post",
+  "uri": "http://localhost:8082/api/orders/XH17916377907788A1892/pay",
+  "status": 200,
+  "expected": "200",
+  "contentType": "application/json",
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"orderNo\":\"XH17916377907788A1892\",\"status\":\"PAID\"}}"
+}

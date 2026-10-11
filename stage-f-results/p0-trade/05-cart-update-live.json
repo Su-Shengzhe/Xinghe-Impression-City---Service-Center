@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "content": "{\"code\":0,\"message\":\"success\",\"data\":{\"skuId\":990001,\"productName\":\"Stage F Test Item\",\"storeId\":1,\"unitPrice\":1.00,\"quantity\":1,\"lineAmount\":1.00}}"
+}

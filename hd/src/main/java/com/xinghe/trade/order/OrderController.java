@@ -66,6 +66,13 @@ public class OrderController {
         return ApiResponse.ok(service.ship(storeId, orderNo, request.company(), request.trackingNo()));
     }
 
+    /** 店铺订单工作台只读取当前店铺的子订单。 */
+    @GetMapping("/store")
+    public ApiResponse<List<OrderService.StoreOrderView>> storeOrders(
+            @RequestHeader("X-Store-Id") @Positive Long storeId) {
+        return ApiResponse.ok(service.storeOrders(storeId));
+    }
+
     // 阶段 A：开发联调期间校验请求头与请求体用户一致，避免订单接口被冒用。
     private String requireSameUser(String headerUserId, String bodyUserId) {
         String normalizedHeaderUserId = requireUser(headerUserId);
