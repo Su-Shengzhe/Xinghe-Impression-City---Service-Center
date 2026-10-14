@@ -12,6 +12,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /** 管理店铺商品资料和商品对应的数据库库存。 */
 @Service
@@ -108,15 +111,25 @@ public class ProductManagementService {
         throw new IllegalStateException("库存并发冲突，请稍后重试");
     }
 
-    /** 查询当前店铺的商品和库存，用于店铺工作台的商品维护页面。 */
-    public List<ProductStockView> list(Long storeId) {
+    /** Bounded store listing with one batched inventory query per page. */
+    public ProductStockPage listPage(Long storeId, int page, int size) {
         requireStore(storeId);
-        return productMapper.selectList(new LambdaQueryWrapper<Product>()
-                        .eq(Product::getStoreId, storeId)
-                        .orderByDesc(Product::getUpdatedAt))
-                .stream()
-                .map(product -> new ProductStockView(product, inventoryMapper.selectById(product.getId())))
-                .toList();
+        if (page < 0 || page > 1000 || size < 1 || size > 100) throw new IllegalArgumentException("分页参数无效");
+        int offset = page * size;
+        List<Product> products = productMapper.selectList(new LambdaQueryWrapper<Product>()
+                .eq(Product::getStoreId, storeId)
+                .orderByDesc(Product::getUpdatedAt, Product::getId)
+                .last("LIMIT " + offset + ", " + (size + 1)));
+        boolean hasMore = products.size() > size;
+        if (hasMore) products = products.subList(0, size);
+        if (products.isEmpty()) return new ProductStockPage(List.of(), page, size, false);
+        Map<Long, ProductInventory> inventoryBySku = inventoryMapper.selectBatchIds(
+                        products.stream().map(Product::getId).toList())
+                .stream().collect(Collectors.toMap(ProductInventory::getSkuId, Function.identity()));
+        if (inventoryBySku.size() != products.size()) throw new IllegalStateException("商品库存记录不存在");
+        List<ProductStockView> items = products.stream()
+                .map(product -> new ProductStockView(product, inventoryBySku.get(product.getId()))).toList();
+        return new ProductStockPage(items, page, size, hasMore);
     }
 
     /** 校验店铺有效，避免商品被创建到不存在或停业店铺。 */
@@ -170,4 +183,5 @@ public class ProductManagementService {
     public record ProductUpdateRequest(String name, String description, java.math.BigDecimal price) {}
 
     public record ProductStockView(Product product, ProductInventory inventory) {}
+    public record ProductStockPage(List<ProductStockView> items, int page, int size, boolean hasMore) {}
 }

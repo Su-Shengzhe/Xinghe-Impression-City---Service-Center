@@ -25,6 +25,11 @@ spring:
     elasticsearch:
       repositories:
         enabled: ${XINGHE_ELASTICSEARCH_ENABLED:false}
+  session:
+    store-type: redis
+    timeout: ${SPRING_SESSION_TIMEOUT:30m}
+    redis:
+      namespace: ${SPRING_SESSION_REDIS_NAMESPACE:xinghe:session}
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
@@ -45,13 +50,37 @@ mybatis-plus:
     map-underscore-to-camel-case: true
 server:
   port: ${SERVER_PORT:8081}
+management:
+  health:
+    rabbit:
+      enabled: ${XINGHE_MESSAGING_ENABLED:false}
+    elasticsearch:
+      enabled: ${XINGHE_ELASTICSEARCH_ENABLED:false}
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
 xinghe:
+  order:
+    expiry-scan-ms: ${XINGHE_ORDER_EXPIRY_SCAN_MS:30000}
+  auth:
+    employee-seed:
+      enabled: ${XINGHE_AUTH_EMPLOYEE_SEED_ENABLED:false}
+      username: ${XINGHE_AUTH_EMPLOYEE_SEED_USERNAME:}
+      password: ${XINGHE_AUTH_EMPLOYEE_SEED_PASSWORD:}
+      store-id: ${XINGHE_AUTH_EMPLOYEE_SEED_STORE_ID:0}
   seed:
     enabled: ${XINGHE_SEED_ENABLED:false}
   messaging:
     enabled: ${XINGHE_MESSAGING_ENABLED:false}
     outbox-poll-ms: ${XINGHE_OUTBOX_POLL_MS:1000}
   search:
+    rebuild-api-enabled: ${XINGHE_INDEX_REBUILD_API_ENABLED:false}
     elasticsearch:
       enabled: ${XINGHE_ELASTICSEARCH_ENABLED:false}
   customer-service:

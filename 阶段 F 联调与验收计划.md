@@ -112,27 +112,27 @@ P1 未完成时，不阻塞 P0，但必须在报告中标记为“未完成”�
 
 | 功能 | 方法与路由 | 请求头 | 请求体/参数 | 关键响应 | 权限/异常核对 |
 |---|---|---|---|---|---|
-| 商品搜索 | `GET /api/customer-service/products` | 当前前端请求使用 `X-User-Id` | `keyword` | 在售商品列表 | 搜索空结果、参数编码、错误响应 |
+| 商品搜索 | `GET /api/customer-service/products` | 无（公开） | `keyword` | 在售商品列表 | 搜索空结果、参数编码、错误响应 |
 | 商品详情 | `GET /api/customer-service/products/{skuId}` | 无 | 路径参数 `skuId` | 商品详情 | 是否被前端使用；不存在商品的响应 |
-| 购物车查询 | `GET /api/cart` | `X-User-Id` | — | 购物车行列表 | 用户隔离、空购物车 |
-| 加购物车 | `POST /api/cart/items` | `X-User-Id` | `skuId`, `quantity` | 购物车行 | 非法数量、下架/不存在商品 |
-| 修改购物车 | `PUT /api/cart/items/{skuId}` | `X-User-Id` | `quantity` | 更新后的购物车行 | 数量边界、商品/用户归属 |
-| 删除购物车项 | `DELETE /api/cart/items/{skuId}` | `X-User-Id` | 路径参数 `skuId` | 成功响应 | 用户隔离、重复删除 |
-| 结算 | `POST /api/orders/checkout` | `X-User-Id`, `Idempotency-Token` | — | 父子订单结果列表 | 库存不足、空购物车、幂等重放 |
-| 支付 | `POST /api/orders/{orderNo}/pay` | `X-User-Id`, `Idempotency-Token` | 路径必须传父订单号 | 支付结果 | 子订单支付、重复支付、已取消订单 |
-| 订单详情 | `GET /api/orders/{orderNo}` | `X-User-Id` | 路径参数 `orderNo` | 订单详情 | 跨用户访问拒绝 |
-| 取消订单 | `POST /api/orders/{orderNo}/cancel` | `X-User-Id` | 路径参数 `orderNo` | 成功响应 | 已支付/已发货订单不得非法取消 |
-| 店铺商品与库存 | `GET /api/store/products` | `X-Store-Id` | — | 商品及库存列表 | 店铺归属、空列表 |
-| 商品创建 | `POST /api/store/products` | `X-Store-Id` | `skuId`, `name`, `description`, `price`, `availableQuantity` | 商品结果 | 跨店铺访问、字段校验 |
-| 商品资料更新 | `PUT /api/store/products/{skuId}` | `X-Store-Id` | `name`, `description`, `price` | 商品结果 | 跨店铺访问、字段校验 |
-| 商品上下架 | `PUT /api/store/products/{skuId}/status` | `X-Store-Id` | `status` | 商品结果 | 非法状态、跨店铺访问 |
-| 库存更新 | `PUT /api/store/products/{skuId}/inventory` | `X-Store-Id` | `availableQuantity` | 库存结果 | 库存下限、锁定库存不被破坏 |
-| 店铺订单 | `GET /api/orders/store` | `X-Store-Id` | 当前实现的查询参数 | 所属店铺子订单 | 不得读取其他店铺订单 |
-| 发货 | `POST /api/orders/{orderNo}/ship` | `X-Store-Id` | `company`, `trackingNo` | 物流记录 | 非所属店铺、非法状态、重复发货 |
-| 创建客服会话 | `POST /api/customer-service/sessions` | `X-User-Id` | — | `sessionId`, `createdAt` | 用户身份不能为空 |
-| 客服会话/历史 | `GET /api/customer-service/sessions/{sessionId}`, `/messages` | `X-User-Id` | 路径参数 `sessionId` | 会话或消息列表 | 用户本人会话、跨用户访问拒绝 |
-| 发送客服消息 | `POST /api/customer-service/sessions/{sessionId}/messages` | `X-User-Id`, `Content-Type: application/json`, `Accept: text/event-stream` | `{ "content": "..." }` | SSE `message`、`complete` 事件 | 用户本人会话、内容长度、服务不可用 |
-| 客服订单/物流工具 | `GET /api/customer-service/orders/{orderNo}`、`.../logistics` | `X-User-Id` | 路径参数 `orderNo` | 订单/物流数据 | 跨用户访问拒绝、无物流记录 |
+| 购物车查询 | `GET /api/cart` | Session Cookie（CUSTOMER） | — | 购物车行列表 | 用户隔离、空购物车 |
+| 加购物车 | `POST /api/cart/items` | Session Cookie + CSRF（CUSTOMER） | `skuId`, `quantity` | 购物车行 | 非法数量、下架/不存在商品 |
+| 修改购物车 | `PUT /api/cart/items/{skuId}` | Session Cookie + CSRF（CUSTOMER） | `quantity` | 更新后的购物车行 | 数量边界、商品/用户归属 |
+| 删除购物车项 | `DELETE /api/cart/items/{skuId}` | Session Cookie + CSRF（CUSTOMER） | 路径参数 `skuId` | 成功响应 | 用户隔离、重复删除 |
+| 结算 | `POST /api/orders/checkout` | Session Cookie + CSRF（CUSTOMER）, `Idempotency-Token` | — | 父子订单结果列表 | 库存不足、空购物车、幂等重放 |
+| 支付 | `POST /api/orders/{orderNo}/pay` | Session Cookie + CSRF（CUSTOMER）, `Idempotency-Token` | 路径必须传父订单号 | 支付结果 | 子订单支付、重复支付、已取消订单 |
+| 订单详情 | `GET /api/orders/{orderNo}` | Session Cookie（CUSTOMER） | 路径参数 `orderNo` | 订单详情 | 跨用户访问拒绝 |
+| 取消订单 | `POST /api/orders/{orderNo}/cancel` | Session Cookie + CSRF（CUSTOMER） | 路径参数 `orderNo` | 成功响应 | 已支付/已发货订单不得非法取消 |
+| 店铺商品与库存 | `GET /api/store/products` | Session Cookie（STORE_EMPLOYEE） | — | 商品及库存列表 | 店铺归属、空列表 |
+| 商品创建 | `POST /api/store/products` | Session Cookie + CSRF（STORE_EMPLOYEE） | `skuId`, `name`, `description`, `price`, `availableQuantity` | 商品结果 | 跨店铺访问、字段校验 |
+| 商品资料更新 | `PUT /api/store/products/{skuId}` | Session Cookie + CSRF（STORE_EMPLOYEE） | `name`, `description`, `price` | 商品结果 | 跨店铺访问、字段校验 |
+| 商品上下架 | `PUT /api/store/products/{skuId}/status` | Session Cookie + CSRF（STORE_EMPLOYEE） | `status` | 商品结果 | 非法状态、跨店铺访问 |
+| 库存更新 | `PUT /api/store/products/{skuId}/inventory` | Session Cookie + CSRF（STORE_EMPLOYEE） | `availableQuantity` | 库存结果 | 库存下限、锁定库存不被破坏 |
+| 店铺订单 | `GET /api/orders/store` | Session Cookie（STORE_EMPLOYEE） | 当前账号绑定店铺 | 所属店铺子订单 | 不得读取其他店铺订单 |
+| 发货 | `POST /api/orders/{orderNo}/ship` | Session Cookie + CSRF（STORE_EMPLOYEE） | `company`, `trackingNo` | 物流记录 | 非所属店铺、非法状态、重复发货 |
+| 创建客服会话 | `POST /api/customer-service/sessions` | Session Cookie（CUSTOMER） | — | `sessionId`, `createdAt` | 用户身份不能为空 |
+| 客服会话/历史 | `GET /api/customer-service/sessions/{sessionId}`, `/messages` | Session Cookie（CUSTOMER） | 路径参数 `sessionId` | 会话或消息列表 | 用户本人会话、跨用户访问拒绝 |
+| 发送客服消息 | `POST /api/customer-service/sessions/{sessionId}/messages` | Session Cookie + CSRF（CUSTOMER）, `Content-Type: application/json`, `Accept: text/event-stream` | `{ "content": "..." }` | SSE `message`、`complete` 事件 | 用户本人会话、内容长度、服务不可用 |
+| 客服订单/物流工具 | `GET /api/customer-service/orders/{orderNo}`、`.../logistics` | Session Cookie（CUSTOMER） | 路径参数 `orderNo` | 订单/物流数据 | 跨用户访问拒绝、无物流记录 |
 
 客服 SSE 消息接口为 `POST /api/customer-service/sessions/{sessionId}/messages`，请求体为 `{ "content": "..." }`，应检查 `message`、`complete` 和错误事件的实际行为。
 

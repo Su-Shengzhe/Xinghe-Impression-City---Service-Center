@@ -7,7 +7,6 @@ import com.xinghe.trade.inventory.ProductInventory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.core.Message;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,7 +19,6 @@ import com.xinghe.trade.messaging.MessageProcessingService;
 
 /** 消费订单延迟消息，取消未支付订单并释放数据库中的锁定库存。 */
 @Component
-@ConditionalOnProperty(name = "xinghe.messaging.enabled", havingValue = "true")
 public class OrderTimeoutConsumer {
     private final TradeOrderMapper orderMapper;
     private final TradeOrderItemMapper orderItemMapper;
@@ -56,7 +54,8 @@ public class OrderTimeoutConsumer {
         this(orderMapper, null, null, null);
     }
 
-    @RabbitListener(queues = "xinghe.order.cancel")
+    @RabbitListener(queues = {"xinghe.order.cancel", "xinghe.order.cancel.attempt.2",
+            "xinghe.order.cancel.attempt.3"}, autoStartup = "${xinghe.messaging.enabled:false}")
     @Transactional
     public void consume(Message message) {
         String eventId = message.getMessageProperties().getMessageId();
@@ -69,6 +68,7 @@ public class OrderTimeoutConsumer {
         }
     }
 
+    @Transactional
     public void cancel(String orderNo) {
         cancelInternal(orderNo);
     }
@@ -96,13 +96,17 @@ public class OrderTimeoutConsumer {
 
     /** 只有条件取消成功的消息才释放库存，重复投递不会重复补偿。 */
     private void cancelChild(TradeOrder order) {
+        LocalDateTime now = LocalDateTime.now();
+        if (order.getExpiresAt() != null && order.getExpiresAt().isAfter(now)) return;
         TradeOrder update = new TradeOrder();
         update.setOrderNo(order.getOrderNo());
         update.setStatus("CANCELLED");
-        update.setUpdatedAt(LocalDateTime.now());
-        int updated = orderMapper.update(update, new LambdaUpdateWrapper<TradeOrder>()
+        update.setUpdatedAt(now);
+        LambdaUpdateWrapper<TradeOrder> condition = new LambdaUpdateWrapper<TradeOrder>()
                 .eq(TradeOrder::getOrderNo, order.getOrderNo())
-                .eq(TradeOrder::getStatus, "PENDING_PAYMENT"));
+                .eq(TradeOrder::getStatus, "PENDING_PAYMENT");
+        if (order.getExpiresAt() != null) condition.le(TradeOrder::getExpiresAt, now);
+        int updated = orderMapper.update(update, condition);
         if (updated != 1) return;
 
         List<TradeOrderItem> items = orderItemMapper == null ? List.of() : orderItemMapper.selectList(

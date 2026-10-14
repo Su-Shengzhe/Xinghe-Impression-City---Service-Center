@@ -18,6 +18,8 @@ import java.time.Duration;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,6 +28,112 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class OrderServiceTest {
+    @Test
+    void databaseCheckoutTokenReplaysCommittedOrderWithoutRedisOrAnotherCartRead() {
+        RedisTemplate<String, Object> redis = mock(RedisTemplate.class);
+        CheckoutIdempotencyMapper tokens = mock(CheckoutIdempotencyMapper.class);
+        CartItemMapper carts = mock(CartItemMapper.class);
+        TradeOrderMapper orders = mock(TradeOrderMapper.class);
+        TradeOrderItemMapper items = mock(TradeOrderItemMapper.class);
+        ProductMapper products = mock(ProductMapper.class);
+        ProductInventoryMapper inventory = mock(ProductInventoryMapper.class);
+        CartItem cart = cartItem(10001L, 1);
+        cart.setId(17L);
+        AtomicReference<String> parentNo = new AtomicReference<>();
+        when(tokens.insertProcessing("user-1", "same-token")).thenReturn(1, 0);
+        when(tokens.selectForUpdate("user-1", "same-token")).thenAnswer(invocation -> {
+            CheckoutIdempotency token = new CheckoutIdempotency();
+            token.setStatus(parentNo.get() == null ? "PROCESSING" : "SUCCEEDED");
+            token.setParentOrderNo(parentNo.get());
+            return token;
+        });
+        when(tokens.markSucceeded(eq("user-1"), eq("same-token"), anyString())).thenAnswer(invocation -> {
+            parentNo.set(invocation.getArgument(2));
+            return 1;
+        });
+        when(carts.selectForCheckout("user-1")).thenReturn(List.of(cart));
+        when(carts.deleteSnapshot(eq("user-1"), anyList())).thenReturn(1);
+        when(products.selectById(10001L)).thenReturn(product("ON_SALE", "199.00"));
+        when(inventory.lockAvailable(10001L, 1)).thenReturn(1);
+        when(orders.insert(any(TradeOrder.class))).thenReturn(1);
+        when(orders.updateById(any(TradeOrder.class))).thenReturn(1);
+        when(items.insert(any(TradeOrderItem.class))).thenReturn(1);
+        when(orders.selectById(anyString())).thenAnswer(invocation -> {
+            TradeOrder parent = new TradeOrder();
+            parent.setOrderNo(parentNo.get());
+            parent.setUserId("user-1");
+            parent.setStatus("PENDING_PAYMENT");
+            return parent;
+        });
+        when(orders.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of());
+
+        OrderService service = new OrderService(redis, mock(RabbitTemplate.class), orders, items,
+                products, carts, inventory, mock(LogisticsMapper.class),
+                mock(com.xinghe.trade.payment.PaymentIdempotencyMapper.class), tokens, null);
+
+        List<OrderService.OrderResult> first = service.checkout("user-1", "same-token");
+        List<OrderService.OrderResult> replay = service.checkout("user-1", "same-token");
+
+        assertThat(first).hasSize(2);
+        assertThat(replay.get(0).orderNo()).isEqualTo(parentNo.get());
+        verify(orders, times(2)).insert(any(TradeOrder.class));
+        verify(carts, times(1)).selectForCheckout("user-1");
+        verify(tokens, times(1)).markSucceeded(eq("user-1"), eq("same-token"), anyString());
+        verify(orders).insert(org.mockito.ArgumentMatchers.<TradeOrder>argThat(order ->
+                order.getParentOrderNo() == null && order.getExpiresAt() != null));
+        verify(orders).insert(org.mockito.ArgumentMatchers.<TradeOrder>argThat(order ->
+                order.getParentOrderNo() != null && order.getExpiresAt() != null));
+        verifyNoInteractions(redis);
+    }
+
+    @Test
+    void rejectsPaymentAfterPersistedDeadline() {
+        com.xinghe.trade.payment.PaymentIdempotencyMapper payments =
+                mock(com.xinghe.trade.payment.PaymentIdempotencyMapper.class);
+        com.xinghe.trade.payment.PaymentIdempotency token = new com.xinghe.trade.payment.PaymentIdempotency();
+        token.setToken("pay-token");
+        token.setOrderNo("ORDER-1");
+        token.setUserId("user-1");
+        token.setStatus("PROCESSING");
+        when(payments.selectForUpdate("pay-token")).thenReturn(token);
+        TradeOrder expired = new TradeOrder();
+        expired.setOrderNo("ORDER-1");
+        expired.setUserId("user-1");
+        expired.setStatus("PENDING_PAYMENT");
+        expired.setExpiresAt(LocalDateTime.now().minusSeconds(1));
+        TradeOrderMapper orders = mock(TradeOrderMapper.class);
+        when(orders.selectForUpdate("ORDER-1")).thenReturn(expired);
+        OrderService service = new OrderService(mock(RedisTemplate.class), mock(RabbitTemplate.class),
+                orders, mock(TradeOrderItemMapper.class), mock(ProductMapper.class),
+                mock(CartItemMapper.class), mock(ProductInventoryMapper.class),
+                mock(LogisticsMapper.class), payments, null);
+
+        assertThatThrownBy(() -> service.pay("ORDER-1", "user-1", "pay-token"))
+                .isInstanceOf(IllegalStateException.class).hasMessage("订单已超时，支付失败");
+        verify(orders, never()).update(any(TradeOrder.class), any());
+    }
+
+    @Test
+    void failedDatabaseCheckoutNeverPublishesSuccessfulToken() {
+        CheckoutIdempotencyMapper tokens = mock(CheckoutIdempotencyMapper.class);
+        CheckoutIdempotency claimed = new CheckoutIdempotency();
+        claimed.setStatus("PROCESSING");
+        when(tokens.insertProcessing("user-1", "failed-token")).thenReturn(1);
+        when(tokens.selectForUpdate("user-1", "failed-token")).thenReturn(claimed);
+        CartItemMapper carts = mock(CartItemMapper.class);
+        when(carts.selectForCheckout("user-1")).thenReturn(List.of());
+        RedisTemplate<String, Object> redis = mock(RedisTemplate.class);
+        OrderService service = new OrderService(redis, mock(RabbitTemplate.class), mock(TradeOrderMapper.class),
+                mock(TradeOrderItemMapper.class), mock(ProductMapper.class), carts,
+                mock(ProductInventoryMapper.class), mock(LogisticsMapper.class),
+                mock(com.xinghe.trade.payment.PaymentIdempotencyMapper.class), tokens, null);
+
+        assertThatThrownBy(() -> service.checkout("user-1", "failed-token"))
+                .isInstanceOf(IllegalStateException.class).hasMessage("购物车为空");
+        verify(tokens, never()).markSucceeded(anyString(), anyString(), anyString());
+        verifyNoInteractions(redis);
+    }
+
     @Test
     void checksOutCartUsingServerPriceAndLocksDatabaseInventory() {
         CartItemMapper cartMapper = mock(CartItemMapper.class);
@@ -305,7 +413,7 @@ class OrderServiceTest {
         TradeOrder second = storeOrder("ORDER-2");
         LogisticsRecord secondLogistics = logistics("ORDER-2");
         LogisticsRecord firstLogistics = logistics("ORDER-1");
-        when(orderMapper.selectStoreOrders(5L)).thenReturn(List.of(first, second));
+        when(orderMapper.selectStoreOrders(5L, 0, 51)).thenReturn(List.of(first, second));
         when(logisticsMapper.selectList(any(LambdaQueryWrapper.class)))
                 .thenReturn(List.of(secondLogistics, firstLogistics));
 
@@ -313,7 +421,7 @@ class OrderServiceTest {
                 orderMapper, mock(TradeOrderItemMapper.class), mock(ProductMapper.class),
                 mock(CartItemMapper.class), mock(ProductInventoryMapper.class), logisticsMapper);
 
-        List<OrderService.StoreOrderView> result = service.storeOrders(5L);
+        List<OrderService.StoreOrderView> result = service.storeOrdersPage(5L, 0, 50).items();
 
         assertThat(result).extracting(view -> view.order().getOrderNo())
                 .containsExactly("ORDER-1", "ORDER-2");
@@ -328,14 +436,33 @@ class OrderServiceTest {
     void doesNotQueryLogisticsWhenStoreHasNoOrders() {
         TradeOrderMapper orderMapper = mock(TradeOrderMapper.class);
         LogisticsMapper logisticsMapper = mock(LogisticsMapper.class);
-        when(orderMapper.selectStoreOrders(5L)).thenReturn(new ArrayList<>());
+        when(orderMapper.selectStoreOrders(5L, 0, 51)).thenReturn(new ArrayList<>());
 
         OrderService service = new OrderService(mock(RedisTemplate.class), mock(RabbitTemplate.class),
                 orderMapper, mock(TradeOrderItemMapper.class), mock(ProductMapper.class),
                 mock(CartItemMapper.class), mock(ProductInventoryMapper.class), logisticsMapper);
 
-        assertThat(service.storeOrders(5L)).isEmpty();
+        assertThat(service.storeOrdersPage(5L, 0, 50).items()).isEmpty();
         verifyNoInteractions(logisticsMapper);
+    }
+
+    @Test
+    void storeOrderPageOnlyLoadsLogisticsForVisibleOrders() {
+        TradeOrderMapper orderMapper = mock(TradeOrderMapper.class);
+        LogisticsMapper logisticsMapper = mock(LogisticsMapper.class);
+        when(orderMapper.selectStoreOrders(5L, 2, 3)).thenReturn(List.of(
+                storeOrder("ORDER-3"), storeOrder("ORDER-4"), storeOrder("ORDER-5")));
+        when(logisticsMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of());
+        OrderService service = new OrderService(mock(RedisTemplate.class), mock(RabbitTemplate.class),
+                orderMapper, mock(TradeOrderItemMapper.class), mock(ProductMapper.class),
+                mock(CartItemMapper.class), mock(ProductInventoryMapper.class), logisticsMapper);
+
+        OrderService.StoreOrderPage page = service.storeOrdersPage(5L, 1, 2);
+
+        assertThat(page.items()).extracting(view -> view.order().getOrderNo())
+                .containsExactly("ORDER-3", "ORDER-4");
+        assertThat(page.hasMore()).isTrue();
+        verify(logisticsMapper).selectList(any(LambdaQueryWrapper.class));
     }
 
     private TradeOrder storeOrder(String orderNo) {

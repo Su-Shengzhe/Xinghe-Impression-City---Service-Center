@@ -1,5 +1,9 @@
 <script setup>
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import AuthDialog from './components/AuthDialog.vue'
+import SessionSidebar from './components/SessionSidebar.vue'
+import { useApi } from './composables/useApi.js'
+import { logoutSafely, shouldForgetSession } from './lib/failurePolicy.js'
 import {
   Activity,
   ArrowUpRight,
@@ -13,31 +17,34 @@ import {
   Headphones,
   LoaderCircle,
   Menu,
-  MessageCircle,
-  MessagesSquare,
   PackageSearch,
   PanelRight,
   Plus,
   Search,
   Send,
-  ShoppingCart,
   ShoppingBag,
   Sparkles,
-  Store,
   Trash2,
   Truck,
   UserRound,
   X,
 } from 'lucide-vue-next'
 
-const userId = ref(localStorage.getItem('xinghe:user-id') || 'user-1001')
-const userDraft = ref(userId.value)
+const userId = ref('')
+const account = ref(null)
+const authMode = ref('login')
+const authForm = ref({ username: '', password: '' })
+const authLoading = ref(false)
+const authReady = ref(false)
 const userDialogOpen = ref(false)
 const mobileSessionsOpen = ref(false)
 const mobileToolsOpen = ref(false)
 const sessions = ref([])
 const selectedSessionId = ref('')
 const messages = ref([])
+const loadedSessionId = ref('')
+const historyHasMore = ref(false)
+const historyLoadingMore = ref(false)
 const draft = ref('')
 const isSending = ref(false)
 const isLoadingHistory = ref(false)
@@ -52,13 +59,19 @@ const customerOrders = ref([])
 const selectedOrder = ref(null)
 const orderLookup = ref('')
 const commerceProducts = ref([])
+const selectedProduct = ref(null)
+const productDetailLoading = ref(false)
 const commerceKeyword = ref('')
 const commerceLoading = ref(false)
-const storeId = ref(localStorage.getItem('xinghe:store-id') || '1')
 const storeProducts = ref([])
 const storeOrders = ref([])
 const storeLoading = ref(false)
+const storeProductPage = ref(0)
+const storeOrderPage = ref(0)
+const storeProductHasMore = ref(false)
+const storeOrderHasMore = ref(false)
 const newProduct = ref({ skuId: '', name: '', description: '', price: '', availableQuantity: 0 })
+const productEditDrafts = ref({})
 const shipmentDrafts = ref({})
 const orderNo = ref('')
 const productKeyword = ref('')
@@ -70,10 +83,14 @@ const toolError = ref('')
 const messageList = ref(null)
 const showScrollToBottom = ref(false)
 let noticeTimer
+let historyRequestVersion = 0
 
 const currentSession = computed(() => sessions.value.find((item) => item.sessionId === selectedSessionId.value) || null)
-const canSend = computed(() => Boolean(draft.value.trim()) && !isSending.value && Boolean(userId.value.trim()))
-const userMark = computed(() => (userId.value.trim().slice(0, 1) || 'U').toUpperCase())
+const canSend = computed(() => Boolean(draft.value.trim()) && !isSending.value && Boolean(account.value))
+const displayUser = computed(() => account.value?.username || '未登录')
+const isCustomer = computed(() => account.value?.role === 'CUSTOMER')
+const isStoreEmployee = computed(() => account.value?.role === 'STORE_EMPLOYEE')
+const workspaceTitle = computed(() => workspaceMode.value === 'store' ? '店铺工作台' : workspaceMode.value === 'commerce' ? '顾客交易' : '客服工作台')
 
 function sessionStorageKey(id = userId.value) {
   return `xinghe:sessions:${encodeURIComponent(id)}`
@@ -109,47 +126,34 @@ function showNotice(message, kind = 'error') {
   }, 4200)
 }
 
-function headers(extra = {}) {
-  return { 'X-User-Id': userId.value.trim(), ...extra }
-}
+const { csrfToken, ensureCsrfToken, buildRequestHeaders, readApiResponse, apiGet, apiRequest } = useApi({
+  onUnauthorized: () => {
+    clearAuthenticatedState()
+    userDialogOpen.value = true
+    showNotice('登录已过期，请重新登录')
+  },
+  onForbidden: (message) => showNotice(message),
+})
 
-async function readApiResponse(response) {
-  // 统一解析 JSON 响应、业务错误码和 HTTP 错误，供查询接口复用。
-  const raw = await response.text()
-  let result
-  try {
-    result = raw ? JSON.parse(raw) : null
-  } catch {
-    result = null
-  }
-
-  if (!response.ok) {
-    throw new Error(result?.message || `请求失败（${response.status}）`)
-  }
-  if (result && typeof result === 'object' && 'code' in result && result.code !== 0) {
-    throw new Error(result.message || '服务暂时不可用')
-  }
-  return result && typeof result === 'object' && 'data' in result ? result.data : result
-}
-
-async function apiGet(url) {
-  // 使用当前联调用户身份调用只读查询接口。
-  const response = await fetch(url, { headers: headers() })
-  return readApiResponse(response)
-}
-
-function storeHeaders(extra = {}) {
-  return { 'X-Store-Id': storeId.value.trim(), ...extra }
-}
-
-async function apiRequest(url, { method = 'GET', body, headers: extra = {} } = {}, identity = 'user') {
-  const requestHeaders = identity === 'store' ? storeHeaders(extra) : headers(extra)
-  if (body !== undefined) requestHeaders['Content-Type'] = 'application/json'
-  return readApiResponse(await fetch(url, {
-    method,
-    headers: requestHeaders,
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  }))
+function clearAuthenticatedState() {
+  account.value = null
+  userId.value = ''
+  workspaceMode.value = 'service'
+  sessions.value = []
+  selectedSessionId.value = ''
+  messages.value = []
+  loadedSessionId.value = ''
+  historyHasMore.value = false
+  cart.value = []
+  customerOrders.value = []
+  selectedOrder.value = null
+  csrfToken.value = ''
+  storeProducts.value = []
+  storeOrders.value = []
+  storeProductPage.value = 0
+  storeOrderPage.value = 0
+  storeProductHasMore.value = false
+  storeOrderHasMore.value = false
 }
 
 async function loadCart() {
@@ -162,11 +166,17 @@ async function loadCart() {
 }
 
 async function loadCustomerOrders(orderNoToLoad = '') {
-  if (orderNoToLoad.trim()) {
-    selectedOrder.value = await apiGet(`/api/orders/${encodeURIComponent(orderNoToLoad.trim())}`)
+  const value = orderNoToLoad.trim()
+  if (!value) {
+    selectedOrder.value = null
     return
   }
-  selectedOrder.value = null
+  try {
+    selectedOrder.value = await apiGet(`/api/orders/${encodeURIComponent(value)}`)
+  } catch (error) {
+    selectedOrder.value = null
+    showNotice(`订单读取失败：${error.message}`)
+  }
 }
 
 async function loadCommerceProducts() {
@@ -175,6 +185,9 @@ async function loadCommerceProducts() {
     const query = new URLSearchParams()
     if (commerceKeyword.value.trim()) query.set('keyword', commerceKeyword.value.trim())
     commerceProducts.value = await apiGet(`/api/customer-service/products${query.size ? `?${query}` : ''}`)
+    if (selectedProduct.value && !commerceProducts.value.some((product) => product.id === selectedProduct.value.id)) {
+      selectedProduct.value = null
+    }
   } catch (error) {
     showNotice(`商品读取失败：${error.message}`)
   } finally {
@@ -182,18 +195,48 @@ async function loadCommerceProducts() {
   }
 }
 
-async function loadStoreWorkspace() {
-  if (!storeId.value.trim() || !/^\d+$/.test(storeId.value.trim())) {
-    showNotice('请输入有效的店铺 ID')
+async function refreshCommerce() {
+  // 顾客工作台的刷新入口统一处理购物车和商品搜索的失败状态，避免产生未处理请求。
+  try {
+    await Promise.all([loadCart(), loadCommerceProducts()])
+  } catch (error) {
+    showNotice(`顾客数据刷新失败：${error.message}`)
+  }
+}
+
+async function loadProductDetail(product) {
+  productDetailLoading.value = true
+  try {
+    selectedProduct.value = await apiGet(`/api/customer-service/products/${encodeURIComponent(product.id)}`)
+  } catch (error) {
+    showNotice(`商品详情读取失败：${error.message}`)
+  } finally {
+    productDetailLoading.value = false
+  }
+}
+
+async function loadStoreWorkspace(productPage = storeProductPage.value, orderPage = storeOrderPage.value) {
+  if (!isStoreEmployee.value) {
+    showNotice('店铺工作台仅对店铺员工开放')
     return
   }
-  localStorage.setItem('xinghe:store-id', storeId.value.trim())
   storeLoading.value = true
   try {
-    const [productRows, orderRows] = await Promise.all([
-      apiRequest('/api/store/products', {}, 'store'),
-      apiRequest('/api/orders/store', {}, 'store'),
+    const [productResult, orderResult] = await Promise.all([
+      apiGet(`/api/store/products?page=${productPage}&size=50`),
+      apiGet(`/api/orders/store?page=${orderPage}&size=50`),
     ])
+    const productRows = productResult.items
+    const orderRows = orderResult.items
+    productEditDrafts.value = productRows.reduce((drafts, entry) => {
+      const skuId = entry.product.id
+      drafts[skuId] = productEditDrafts.value[skuId] || {
+        name: entry.product.name || '',
+        description: entry.product.description || '',
+        price: entry.product.price,
+      }
+      return drafts
+    }, {})
     shipmentDrafts.value = orderRows.reduce((drafts, entry) => {
       const orderNoValue = entry.order.orderNo
       drafts[orderNoValue] = shipmentDrafts.value[orderNoValue] || { company: '', trackingNo: '' }
@@ -201,6 +244,10 @@ async function loadStoreWorkspace() {
     }, {})
     storeProducts.value = productRows
     storeOrders.value = orderRows
+    storeProductPage.value = productPage
+    storeOrderPage.value = orderPage
+    storeProductHasMore.value = productResult.hasMore
+    storeOrderHasMore.value = orderResult.hasMore
   } catch (error) {
     showNotice(`店铺数据读取失败：${error.message}`)
   } finally {
@@ -216,6 +263,73 @@ async function runCommerce(action, successMessage) {
   } catch (error) {
     showNotice(error.message)
     return false
+  }
+}
+
+async function loadCurrentAccount() {
+  try {
+    const current = await apiGet('/api/auth/me', { handleUnauthorized: false })
+    account.value = current
+    userId.value = current.userId
+    authForm.value.username = current.username || ''
+    workspaceMode.value = current.role === 'STORE_EMPLOYEE' ? 'store' : 'service'
+    storeProductPage.value = 0
+    storeOrderPage.value = 0
+    return current
+  } catch (error) {
+    if (!account.value) userDialogOpen.value = true
+    return null
+  }
+}
+
+async function submitAuthentication() {
+  const username = authForm.value.username.trim()
+  const password = authForm.value.password
+  if (!username || password.length < 8) {
+    showNotice('请输入用户名和至少 8 位密码')
+    return
+  }
+  authLoading.value = true
+  try {
+    await ensureCsrfToken()
+    if (authMode.value === 'register') {
+      await apiRequest('/api/auth/register', { method: 'POST', body: { username, password }, handleUnauthorized: false })
+    }
+    const current = await apiRequest('/api/auth/login', { method: 'POST', body: { username, password }, handleUnauthorized: false })
+    account.value = current
+    userId.value = current.userId
+    workspaceMode.value = current.role === 'STORE_EMPLOYEE' ? 'store' : 'service'
+    authForm.value.password = ''
+    userDialogOpen.value = false
+    sessions.value = readLocalSessions()
+    const lastSelected = localStorage.getItem(selectedStorageKey())
+    selectedSessionId.value = sessions.value.some((item) => item.sessionId === lastSelected)
+      ? lastSelected
+      : sessions.value[0]?.sessionId || ''
+    messages.value = []
+    loadedSessionId.value = ''
+    saveLocalSessions()
+    if (selectedSessionId.value) await loadHistory(selectedSessionId.value, { quiet: true })
+    if (current.role === 'STORE_EMPLOYEE') await loadStoreWorkspace()
+    showNotice(authMode.value === 'register' ? '注册并登录成功' : '登录成功', 'success')
+    if (workspaceMode.value === 'commerce') await refreshCommerce()
+  } catch (error) {
+    showNotice(`${authMode.value === 'register' ? '注册' : '登录'}失败：${error.message}`)
+  } finally {
+    authLoading.value = false
+  }
+}
+
+async function logout() {
+  try {
+    await logoutSafely(apiRequest, () => {
+      clearAuthenticatedState()
+      userDialogOpen.value = true
+      authMode.value = 'login'
+      authForm.value.password = ''
+    })
+  } catch (error) {
+    if (error.message) showNotice(`退出失败：${error.message}`)
   }
 }
 
@@ -293,10 +407,15 @@ async function cancelOrder(orderNoValue) {
 }
 
 async function saveInventory(product) {
+  const availableQuantity = Number(product.inventory.availableQuantity)
+  if (!Number.isInteger(availableQuantity) || availableQuantity < 0) {
+    showNotice('可用库存必须是非负整数')
+    return
+  }
   await runCommerce(async () => {
     await apiRequest(`/api/store/products/${product.product.id}/inventory`, {
-      method: 'PUT', body: { availableQuantity: Number(product.inventory.availableQuantity) },
-    }, 'store')
+      method: 'PUT', body: { availableQuantity },
+    })
     await loadStoreWorkspace()
     showNotice('库存已更新', 'success')
   })
@@ -305,17 +424,37 @@ async function saveInventory(product) {
 async function toggleProduct(product) {
   await runCommerce(async () => {
     const status = product.product.status === 'ON_SALE' ? 'OFF_SALE' : 'ON_SALE'
-    await apiRequest(`/api/store/products/${product.product.id}/status`, { method: 'PUT', body: { status } }, 'store')
+    await apiRequest(`/api/store/products/${product.product.id}/status`, { method: 'PUT', body: { status } })
     await loadStoreWorkspace()
   }, '商品状态已更新')
+}
+
+async function saveProduct(product) {
+  const draft = productEditDrafts.value[product.product.id]
+  const price = Number(draft?.price)
+  if (!draft?.name?.trim() || !Number.isFinite(price) || price < 0) {
+    showNotice('商品名称不能为空，价格必须是非负数字')
+    return
+  }
+  await runCommerce(async () => {
+    await apiRequest(`/api/store/products/${product.product.id}`, {
+      method: 'PUT',
+      body: {
+        name: draft.name.trim(),
+        description: draft.description || '',
+        price,
+      },
+    })
+    await loadStoreWorkspace()
+  }, '商品资料已更新')
 }
 
 async function createStoreProduct() {
   await runCommerce(async () => {
     const product = { ...newProduct.value, skuId: Number(newProduct.value.skuId), price: Number(newProduct.value.price), availableQuantity: Number(newProduct.value.availableQuantity) }
-    await apiRequest('/api/store/products', { method: 'POST', body: product }, 'store')
+    await apiRequest('/api/store/products', { method: 'POST', body: product })
     newProduct.value = { skuId: '', name: '', description: '', price: '', availableQuantity: 0 }
-    await loadStoreWorkspace()
+    await loadStoreWorkspace(0, storeOrderPage.value)
     showNotice('商品已创建', 'success')
   })
 }
@@ -325,34 +464,48 @@ async function shipStoreOrder(order) {
   await runCommerce(async () => {
     await apiRequest(`/api/orders/${encodeURIComponent(order.orderNo)}/ship`, {
       method: 'POST', body: { company: draft.company || '', trackingNo: draft.trackingNo || '' },
-    }, 'store')
+    })
     await loadStoreWorkspace()
     showNotice('订单已发货', 'success')
   })
 }
 
 function setWorkspaceMode(mode) {
+  if (!account.value) {
+    userDialogOpen.value = true
+    showNotice('请先登录后使用工作台')
+    return
+  }
+  if (mode === 'store' && !isStoreEmployee.value) {
+    showNotice('店铺工作台仅对店铺员工开放')
+    return
+  }
+  if (mode !== 'store' && !isCustomer.value) {
+    showNotice('此工作台仅对顾客开放')
+    return
+  }
   workspaceMode.value = mode
   if (mode === 'commerce') {
-    loadCart()
-    loadCommerceProducts()
+    void refreshCommerce()
   }
   if (mode === 'store') loadStoreWorkspace()
 }
 
 async function createSession() {
   // 创建后端客服会话，并同步更新前端本地会话导航。
-  if (!userId.value.trim()) {
-    showNotice('请先设置联调用户 ID')
+  if (!account.value) {
+    showNotice('请先登录')
     userDialogOpen.value = true
     return null
   }
 
   isCreatingSession.value = true
   try {
+    await ensureCsrfToken()
     const response = await fetch('/api/customer-service/sessions', {
       method: 'POST',
-      headers: headers(),
+      credentials: 'include',
+      headers: buildRequestHeaders({}, 'POST'),
     })
     const session = await readApiResponse(response)
     const item = {
@@ -363,6 +516,8 @@ async function createSession() {
     sessions.value = [item, ...sessions.value.filter((entry) => entry.sessionId !== item.sessionId)]
     selectedSessionId.value = item.sessionId
     messages.value = []
+    loadedSessionId.value = item.sessionId
+    historyHasMore.value = false
     saveLocalSessions()
     closeMobileSessions()
     await scrollToBottom()
@@ -376,33 +531,69 @@ async function createSession() {
 }
 
 async function loadHistory(sessionId, { quiet = false } = {}) {
-  // 切换会话时加载历史消息；无效会话会从本地列表中清理。
+  // Only a confirmed missing/foreign session may remove local navigation state.
+  const requestVersion = ++historyRequestVersion
   isLoadingHistory.value = true
-  messages.value = []
+  if (loadedSessionId.value !== sessionId) {
+    messages.value = []
+    historyHasMore.value = false
+  }
   try {
     const history = await apiGet(`/api/customer-service/sessions/${encodeURIComponent(sessionId)}/messages`)
+    if (requestVersion !== historyRequestVersion || selectedSessionId.value !== sessionId) return
     messages.value = Array.isArray(history) ? history : []
+    loadedSessionId.value = sessionId
+    historyHasMore.value = messages.value.length === 100
     const firstUserMessage = messages.value.find((item) => item.messageType === 'USER')
     const entry = sessions.value.find((item) => item.sessionId === sessionId)
     if (entry && firstUserMessage && entry.title === '新会话') {
       entry.title = firstUserMessage.content.slice(0, 24)
       saveLocalSessions()
     }
-    await scrollToBottom()
   } catch (error) {
+    if (requestVersion !== historyRequestVersion) return
     if (!quiet) showNotice(`读取会话失败：${error.message}`)
-    sessions.value = sessions.value.filter((item) => item.sessionId !== sessionId)
-    selectedSessionId.value = sessions.value[0]?.sessionId || ''
-    saveLocalSessions()
-    if (selectedSessionId.value) await loadHistory(selectedSessionId.value, { quiet: true })
+    if (shouldForgetSession(error)) {
+      sessions.value = sessions.value.filter((item) => item.sessionId !== sessionId)
+      selectedSessionId.value = sessions.value[0]?.sessionId || ''
+      messages.value = []
+      loadedSessionId.value = ''
+      historyHasMore.value = false
+      saveLocalSessions()
+      if (selectedSessionId.value) await loadHistory(selectedSessionId.value, { quiet: true })
+    }
   } finally {
-    isLoadingHistory.value = false
+    if (requestVersion === historyRequestVersion) {
+      isLoadingHistory.value = false
+      if (loadedSessionId.value === sessionId) await scrollToBottom()
+    }
+  }
+}
+
+async function loadOlderHistory() {
+  if (!historyHasMore.value || historyLoadingMore.value || !messages.value.length || !selectedSessionId.value) return
+  const sessionId = selectedSessionId.value
+  const before = messages.value[0].messageId
+  const list = messageList.value
+  const previousHeight = list?.scrollHeight || 0
+  historyLoadingMore.value = true
+  try {
+    const older = await apiGet(`/api/customer-service/sessions/${encodeURIComponent(sessionId)}/messages?before=${encodeURIComponent(before)}`)
+    if (selectedSessionId.value !== sessionId || messages.value[0]?.messageId !== before) return
+    messages.value = [...older, ...messages.value]
+    historyHasMore.value = older.length === 100
+    await nextTick()
+    if (list) list.scrollTop += list.scrollHeight - previousHeight
+  } catch (error) {
+    showNotice(`读取更早消息失败：${error.message}`)
+  } finally {
+    historyLoadingMore.value = false
   }
 }
 
 async function selectSession(sessionId) {
   // 记录用户选择并加载对应会话的消息历史。
-  if (sessionId === selectedSessionId.value) {
+  if (sessionId === selectedSessionId.value && loadedSessionId.value === sessionId) {
     closeMobileSessions()
     return
   }
@@ -470,6 +661,10 @@ function parseSseMessage(response) {
 
     try {
       if (!response.ok) {
+        if (response.status === 401) {
+          clearAuthenticatedState()
+          userDialogOpen.value = true
+        }
         const raw = await response.text()
         let body
         try { body = JSON.parse(raw) } catch { body = null }
@@ -507,8 +702,8 @@ async function sendMessage() {
   // 发送用户消息并接收客服 SSE 回复，同时维护本地会话摘要和滚动位置。
   const content = draft.value.trim()
   if (!content || isSending.value) return
-  if (!userId.value.trim()) {
-    showNotice('请先设置联调用户 ID')
+  if (!account.value) {
+    showNotice('请先登录')
     userDialogOpen.value = true
     return
   }
@@ -533,14 +728,17 @@ async function sendMessage() {
     updateSessionTitle(content)
     await scrollToBottom()
 
+    await ensureCsrfToken()
     const response = await fetch(`/api/customer-service/sessions/${encodeURIComponent(session.sessionId)}/messages`, {
       method: 'POST',
-      headers: headers({
+      credentials: 'include',
+      headers: buildRequestHeaders({
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
-      }),
+      }, 'POST'),
       body: JSON.stringify({ content }),
     })
+    if (!response.ok) await readApiResponse(response)
     const answer = await parseSseMessage(response)
     messages.value.push({ ...answer, messageType: 'ASSISTANT', createdAt: answer.createdAt || new Date().toISOString() })
     const entry = sessions.value.find((item) => item.sessionId === session.sessionId)
@@ -575,30 +773,9 @@ function setPrompt(text) {
 }
 
 function openUserDialog() {
-  userDraft.value = userId.value
+  authMode.value = account.value ? 'login' : authMode.value
+  authForm.value.username = account.value?.username || authForm.value.username
   userDialogOpen.value = true
-}
-
-async function applyUser() {
-  // 切换联调用户后隔离其本地会话，并按该用户恢复最近会话。
-  const nextUserId = userDraft.value.trim()
-  if (!nextUserId) return
-  if (nextUserId === userId.value) {
-    userDialogOpen.value = false
-    return
-  }
-  userId.value = nextUserId
-  localStorage.setItem('xinghe:user-id', nextUserId)
-  selectedSessionId.value = ''
-  messages.value = []
-  sessions.value = readLocalSessions(nextUserId)
-  const lastSelected = localStorage.getItem(selectedStorageKey(nextUserId))
-  selectedSessionId.value = sessions.value.some((item) => item.sessionId === lastSelected)
-    ? lastSelected
-    : sessions.value[0]?.sessionId || ''
-  saveLocalSessions()
-  userDialogOpen.value = false
-  if (selectedSessionId.value) await loadHistory(selectedSessionId.value, { quiet: true })
 }
 
 function openUserSettings() {
@@ -714,6 +891,7 @@ function statusLabel(value) {
     SHIPPED: '已发货',
     COMPLETED: '已完成',
     CANCELLED: '已取消',
+    PENDING_PAYMENT: '待付款',
     NOT_SYNCED: '未同步',
     IN_TRANSIT: '运输中',
     DELIVERED: '已签收',
@@ -744,94 +922,42 @@ function openTool(tool) {
   closeMobileTools()
 }
 
-watch(messages, scrollToBottom, { deep: true })
+watch(messages, () => {
+  if (!historyLoadingMore.value && !isLoadingHistory.value) void scrollToBottom()
+}, { deep: true })
 
 onMounted(async () => {
-  // 页面初始化时恢复本地会话选择，并静默加载最近一次会话。
-  sessions.value = readLocalSessions()
-  const lastSelected = localStorage.getItem(selectedStorageKey())
-  selectedSessionId.value = sessions.value.some((item) => item.sessionId === lastSelected)
-    ? lastSelected
-    : sessions.value[0]?.sessionId || ''
-  if (selectedSessionId.value) await loadHistory(selectedSessionId.value, { quiet: true })
+  // 页面初始化时先恢复服务端 Session，再恢复该账户的本地会话导航。
+  authReady.value = false
+  const current = await loadCurrentAccount()
+  if (current) {
+    sessions.value = readLocalSessions()
+    const lastSelected = localStorage.getItem(selectedStorageKey())
+    selectedSessionId.value = sessions.value.some((item) => item.sessionId === lastSelected)
+      ? lastSelected
+      : sessions.value[0]?.sessionId || ''
+    if (selectedSessionId.value) await loadHistory(selectedSessionId.value, { quiet: true })
+    if (current.role === 'STORE_EMPLOYEE') await loadStoreWorkspace()
+  }
+  authReady.value = true
 })
 </script>
 
 <template>
-  <div class="workspace">
+  <div v-if="authReady" class="workspace">
     <button v-if="mobileSessionsOpen || mobileToolsOpen" class="scrim" aria-label="关闭侧栏" @click="closeMobileSessions(); closeMobileTools()"></button>
 
-    <aside class="session-sidebar" :class="{ 'mobile-open': mobileSessionsOpen }">
-      <div class="brand-lockup">
-        <div class="brand-mark"><Store :size="19" stroke-width="2.2" /></div>
-        <div class="brand-copy">
-          <span class="brand-title">星河印象城</span>
-          <span class="brand-subtitle">交易服务中心</span>
-        </div>
-      </div>
-
-      <div class="workspace-label">服务台</div>
-      <button class="nav-item" :class="{ 'nav-item-active': workspaceMode === 'service' }" type="button" @click="setWorkspaceMode('service')">
-        <MessagesSquare :size="18" />
-        <span>客服工作台</span>
-        <span v-if="workspaceMode === 'service'" class="nav-live-dot"></span>
-      </button>
-      <button class="nav-item" :class="{ 'nav-item-active': workspaceMode === 'commerce' }" type="button" @click="setWorkspaceMode('commerce')">
-        <ShoppingCart :size="18" />
-        <span>顾客交易</span>
-        <span v-if="cart.length" class="nav-count">{{ cart.length }}</span>
-      </button>
-      <button class="nav-item" :class="{ 'nav-item-active': workspaceMode === 'store' }" type="button" @click="setWorkspaceMode('store')">
-        <Store :size="18" />
-        <span>店铺工作台</span>
-      </button>
-
-      <div class="session-section-head">
-        <span>最近会话</span>
-        <button class="icon-button icon-button-small" type="button" title="新建会话" aria-label="新建会话" :disabled="isCreatingSession" @click="createSession">
-          <LoaderCircle v-if="isCreatingSession" class="spin" :size="16" />
-          <Plus v-else :size="17" />
-        </button>
-      </div>
-
-      <div class="session-list">
-        <button
-          v-for="session in sessions"
-          :key="session.sessionId"
-          type="button"
-          class="session-item"
-          :class="{ 'session-item-active': selectedSessionId === session.sessionId }"
-          @click="selectSession(session.sessionId)"
-        >
-          <MessageCircle class="session-item-icon" :size="16" />
-          <span class="session-item-copy">
-            <span class="session-title">{{ session.title }}</span>
-            <span class="session-meta">{{ formatTime(session.updatedAt) }} · {{ shortSessionId(session.sessionId) }}</span>
-          </span>
-        </button>
-        <div v-if="!sessions.length" class="session-empty">
-          <span class="empty-line"></span>
-          <span>暂无会话</span>
-          <button type="button" @click="createSession">新建客服会话</button>
-        </div>
-      </div>
-
-      <div class="sidebar-footer">
-        <div class="service-status"><span class="status-dot"></span><span>服务在线</span></div>
-        <button class="user-switch" type="button" @click="openUserSettings">
-          <span class="user-avatar">{{ userMark }}</span>
-          <span class="user-copy"><span>联调用户</span><strong>{{ userId }}</strong></span>
-          <ChevronDown :size="15" />
-        </button>
-      </div>
-    </aside>
+    <SessionSidebar :account="account" :workspace-mode="workspaceMode" :cart-count="cart.length"
+      :sessions="sessions" :selected-session-id="selectedSessionId" :is-creating-session="isCreatingSession"
+      :mobile-open="mobileSessionsOpen" @mode="setWorkspaceMode" @create-session="createSession"
+      @select-session="selectSession" @settings="openUserSettings" />
 
     <main class="chat-column">
       <header class="topbar">
         <div class="topbar-heading">
           <button class="icon-button mobile-menu-button" type="button" aria-label="打开会话列表" @click="mobileSessionsOpen = true"><Menu :size="19" /></button>
           <div>
-            <div class="breadcrumb"><span>服务台</span><span class="breadcrumb-slash">/</span><strong>客服工作台</strong></div>
+            <div class="breadcrumb"><span>星河印象城</span><span class="breadcrumb-slash">/</span><strong>{{ workspaceTitle }}</strong></div>
             <div class="topbar-caption">多店铺交易 · 统一服务</div>
           </div>
         </div>
@@ -872,8 +998,8 @@ onMounted(async () => {
 
       <section v-if="workspaceMode === 'commerce'" class="commerce-panel">
         <div class="commerce-toolbar">
-          <div><h1>顾客交易</h1><p>{{ userId }} · {{ cart.length }} 件购物车商品</p></div>
-          <button class="lookup-secondary" type="button" :disabled="commerceLoading" @click="loadCart(); loadCommerceProducts()"><LoaderCircle v-if="commerceLoading" class="spin" :size="15" /><Search v-else :size="15" />刷新</button>
+          <div><h1>顾客交易</h1><p>{{ displayUser }} · {{ cart.length }} 件购物车商品</p></div>
+          <button class="lookup-secondary" type="button" :disabled="commerceLoading" @click="refreshCommerce"><LoaderCircle v-if="commerceLoading" class="spin" :size="15" /><Search v-else :size="15" />刷新</button>
         </div>
         <div class="commerce-layout">
           <section class="commerce-section">
@@ -883,8 +1009,13 @@ onMounted(async () => {
             <article v-for="product in commerceProducts" :key="product.id" class="commerce-product">
               <div class="commerce-item-icon"><ShoppingBag :size="17" /></div>
               <div class="commerce-product-copy"><strong>{{ product.name }}</strong><span>SKU {{ product.id }} · 店铺 {{ product.storeId }}</span><small>{{ product.description || '暂无商品描述' }}</small></div>
-              <div class="commerce-product-action"><b>¥{{ product.price }}</b><button class="lookup-primary" type="button" @click="addToCart(product.id)"><CirclePlus :size="14" />加入</button></div>
+              <div class="commerce-product-action"><b>¥{{ product.price }}</b><div class="commerce-product-buttons"><button class="lookup-secondary" type="button" :disabled="productDetailLoading" @click="loadProductDetail(product)">详情</button><button class="lookup-primary" type="button" @click="addToCart(product.id)"><CirclePlus :size="14" />加入</button></div></div>
             </article>
+            <div v-if="selectedProduct" class="product-detail-card">
+              <div class="product-detail-heading"><div><strong>{{ selectedProduct.name }}</strong><span>SKU {{ selectedProduct.id }} · 店铺 {{ selectedProduct.storeId }}</span></div><button class="icon-button icon-button-small" type="button" aria-label="关闭商品详情" @click="selectedProduct = null"><X :size="14" /></button></div>
+              <p>{{ selectedProduct.description || '暂无商品描述' }}</p>
+              <div class="product-detail-price">¥{{ selectedProduct.price }} <span>{{ statusLabel(selectedProduct.status) }}</span></div>
+            </div>
           </section>
           <section class="commerce-section">
             <div class="commerce-section-heading"><h2>购物车</h2><strong class="section-count">{{ cart.length }}</strong></div>
@@ -914,7 +1045,7 @@ onMounted(async () => {
       <section v-else-if="workspaceMode === 'store'" class="commerce-panel store-panel">
         <div class="commerce-toolbar">
           <div><h1>店铺工作台</h1><p>商品库存、订单与物流管理</p></div>
-          <div class="store-toolbar-actions"><label>店铺 ID<input v-model="storeId" inputmode="numeric" aria-label="店铺 ID"></label><button class="lookup-secondary" type="button" :disabled="storeLoading" @click="loadStoreWorkspace"><LoaderCircle v-if="storeLoading" class="spin" :size="15" /><Search v-else :size="15" />刷新</button></div>
+          <div class="store-toolbar-actions"><span>所属店铺：{{ account?.storeId }}</span><button class="lookup-secondary" type="button" :disabled="storeLoading" @click="loadStoreWorkspace()"><LoaderCircle v-if="storeLoading" class="spin" :size="15" /><Search v-else :size="15" />刷新</button></div>
         </div>
         <section class="commerce-section store-create-section">
           <div class="commerce-section-heading"><h2>新增商品</h2></div>
@@ -925,11 +1056,13 @@ onMounted(async () => {
         <div class="store-content-grid">
           <section class="commerce-section"><div class="commerce-section-heading"><h2>商品与库存</h2><strong class="section-count">{{ storeProducts.length }}</strong></div>
             <div v-if="!storeProducts.length" class="commerce-empty">暂无商品</div>
-            <article v-for="entry in storeProducts" :key="entry.product.id" class="store-product-row"><div class="commerce-product-copy"><strong>{{ entry.product.name }}</strong><span>SKU {{ entry.product.id }} · {{ statusLabel(entry.product.status) }}</span><small>锁定 {{ entry.inventory.lockedQuantity }} · 已售 {{ entry.inventory.soldQuantity }}</small></div><label class="inventory-input">可用<input v-model.number="entry.inventory.availableQuantity" type="number" min="0"></label><button class="lookup-secondary" type="button" @click="saveInventory(entry)">保存</button><button class="lookup-secondary" type="button" @click="toggleProduct(entry)">{{ entry.product.status === 'ON_SALE' ? '下架' : '上架' }}</button></article>
+            <article v-for="entry in storeProducts" :key="entry.product.id" class="store-product-row"><div class="commerce-product-copy"><strong>{{ entry.product.name }}</strong><span>SKU {{ entry.product.id }} · {{ statusLabel(entry.product.status) }}</span><small>锁定 {{ entry.inventory.lockedQuantity }} · 已售 {{ entry.inventory.soldQuantity }}</small><label class="store-edit-field">商品资料<input v-model="productEditDrafts[entry.product.id].name" maxlength="120"></label><label class="store-edit-field">描述<input v-model="productEditDrafts[entry.product.id].description" maxlength="500"></label><label class="store-edit-field">价格<input v-model="productEditDrafts[entry.product.id].price" type="number" min="0" step="0.01"></label></div><label class="inventory-input">可用<input v-model.number="entry.inventory.availableQuantity" type="number" min="0"></label><div class="store-product-actions"><button class="lookup-secondary" type="button" @click="saveProduct(entry)">资料</button><button class="lookup-secondary" type="button" @click="saveInventory(entry)">库存</button><button class="lookup-secondary" type="button" @click="toggleProduct(entry)">{{ entry.product.status === 'ON_SALE' ? '下架' : '上架' }}</button></div></article>
+            <div class="store-pagination"><button type="button" :disabled="storeLoading || storeProductPage === 0" @click="loadStoreWorkspace(storeProductPage - 1, storeOrderPage)">上一页</button><span>第 {{ storeProductPage + 1 }} 页</span><button type="button" :disabled="storeLoading || !storeProductHasMore" @click="loadStoreWorkspace(storeProductPage + 1, storeOrderPage)">下一页</button></div>
           </section>
           <section class="commerce-section"><div class="commerce-section-heading"><h2>店铺订单</h2><strong class="section-count">{{ storeOrders.length }}</strong></div>
             <div v-if="!storeOrders.length" class="commerce-empty">暂无店铺订单</div>
             <article v-for="entry in storeOrders" :key="entry.order.orderNo" class="store-order-row"><div class="store-order-heading"><strong>{{ entry.order.orderNo }}</strong><span class="result-status">{{ statusLabel(entry.order.status) }}</span></div><div class="store-order-meta">店铺 {{ entry.order.storeId }} · ¥{{ entry.order.amount }} · {{ entry.order.userId }}</div><div v-if="entry.logistics" class="store-order-meta">{{ entry.logistics.company }} · {{ entry.logistics.trackingNo }}</div><form v-else-if="entry.order.status === 'PAID'" class="shipment-form" @submit.prevent="shipStoreOrder(entry.order)"><input v-model="shipmentDrafts[entry.order.orderNo].company" placeholder="承运商" required><input v-model="shipmentDrafts[entry.order.orderNo].trackingNo" placeholder="运单号" required><button class="lookup-primary" type="submit"><Truck :size="14" />发货</button></form></article>
+            <div class="store-pagination"><button type="button" :disabled="storeLoading || storeOrderPage === 0" @click="loadStoreWorkspace(storeProductPage, storeOrderPage - 1)">上一页</button><span>第 {{ storeOrderPage + 1 }} 页</span><button type="button" :disabled="storeLoading || !storeOrderHasMore" @click="loadStoreWorkspace(storeProductPage, storeOrderPage + 1)">下一页</button></div>
           </section>
         </div>
       </section>
@@ -937,12 +1070,15 @@ onMounted(async () => {
       <section v-if="workspaceMode === 'service'" ref="messageList" class="message-list" tabindex="0" aria-live="polite" aria-label="客服消息，可滚动查看历史内容" @scroll="updateScrollButton">
         <div v-if="isLoadingHistory" class="loading-history"><LoaderCircle class="spin" :size="18" />正在加载会话</div>
         <template v-else-if="messages.length">
+          <button v-if="historyHasMore" class="history-more-button" type="button" :disabled="historyLoadingMore" @click="loadOlderHistory">
+            <LoaderCircle v-if="historyLoadingMore" class="spin" :size="15" />加载更早消息
+          </button>
           <div class="day-divider"><span>当前会话</span></div>
           <article v-for="message in messages" :key="message.messageId" class="message-row" :class="message.messageType === 'USER' ? 'message-row-user' : 'message-row-assistant'">
             <div v-if="message.messageType !== 'USER'" class="message-avatar"><Bot :size="17" /></div>
             <div class="message-body">
               <div class="message-meta">
-                <strong>{{ message.messageType === 'USER' ? userId : '星河客服' }}</strong>
+                <strong>{{ message.messageType === 'USER' ? displayUser : '星河客服' }}</strong>
                 <span>{{ formatTime(message.createdAt) }}</span>
                 <span v-if="message.intent && message.messageType !== 'USER' && message.messageType !== 'ERROR'" class="intent-label">{{ intentLabel(message.intent) }}</span>
               </div>
@@ -1079,15 +1215,10 @@ onMounted(async () => {
       <div class="tools-footer"><span class="tool-footer-icon"><Activity :size="15" /></span><span>接口代理</span><code>/api → 8081</code></div>
     </aside>
 
-    <div v-if="userDialogOpen" class="dialog-backdrop" @click.self="userDialogOpen = false">
-      <section class="user-dialog" role="dialog" aria-modal="true" aria-labelledby="user-dialog-title">
-        <div class="dialog-heading"><div class="dialog-icon"><UserRound :size="19" /></div><button class="icon-button" type="button" aria-label="关闭" @click="userDialogOpen = false"><X :size="18" /></button></div>
-        <h2 id="user-dialog-title">切换联调用户</h2>
-        <p>此 ID 会作为 <code>X-User-Id</code> 请求头发送给后端。</p>
-        <label for="test-user-id">用户 ID</label>
-        <input id="test-user-id" v-model="userDraft" type="text" maxlength="80" autocomplete="off" @keydown.enter="applyUser" />
-        <div class="dialog-actions"><button type="button" class="dialog-cancel" @click="userDialogOpen = false">取消</button><button type="button" class="dialog-save" :disabled="!userDraft.trim()" @click="applyUser">应用</button></div>
-      </section>
-    </div>
+    <AuthDialog v-if="userDialogOpen" :account="account" :mode="authMode" :loading="authLoading"
+      :username="authForm.username" :password="authForm.password" @close="userDialogOpen = false"
+      @submit="submitAuthentication" @logout="logout" @update:mode="authMode = $event"
+      @update:username="authForm.username = $event" @update:password="authForm.password = $event" />
   </div>
+  <div v-else class="auth-restoring" role="status" aria-live="polite">正在恢复登录会话…</div>
 </template>

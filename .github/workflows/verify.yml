@@ -1,0 +1,38 @@
+name: verify
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: hd/pom.xml
+      - name: Run backend unit and web tests
+        run: mvn -B -f hd/pom.xml test
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: qd/package-lock.json
+      - name: Install locked frontend dependencies
+        run: npm ci
+        working-directory: qd
+      - name: Build frontend
+        run: npm run build
+        working-directory: qd
+      - name: Test frontend failure handling
+        run: npm test
+        working-directory: qd

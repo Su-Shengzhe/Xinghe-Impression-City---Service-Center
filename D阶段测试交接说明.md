@@ -38,7 +38,20 @@
 | D-04 | 不同 Token 并发支付 | `xinghe_stage_d_d04` | `scripts/stage-d-payment-race.ps1` | `stage-d-different-token` |
 | D-01 等 | 待按测试计划补入 | | | |
 
-**一个用例一个库，不要复用。** 复用会污染"次数类"断言（订单数、幂等表行数、库存锁定数）。
+**一个用例一个库，不要复用。** 复用会污染"次数类"断言（订单数、幂等表行数、库存锁定数）。脚本现在只接受真实登录会话：D-02 的每个并发请求注册唯一顾客账号，D-03/D-04 的每个请求独立登录同一个顾客账号；不再使用 `X-User-Id` / `X-Store-Id`。
+
+### 账号准备
+
+员工账号不能通过顾客注册取得。若目标库已有店铺 `id=1`，可在**启动应用的同一 PowerShell 7 窗口**显式启用一次受信任播种：
+
+```powershell
+$env:XINGHE_AUTH_EMPLOYEE_SEED_ENABLED = "true"
+$env:XINGHE_AUTH_EMPLOYEE_SEED_USERNAME = "stage-d-employee"
+$env:XINGHE_AUTH_EMPLOYEE_SEED_PASSWORD = $env:XINGHE_STAGE_D_EMPLOYEE_PASSWORD
+$env:XINGHE_AUTH_EMPLOYEE_SEED_STORE_ID = "1"
+```
+
+应用配置使用 `XINGHE_AUTH_EMPLOYEE_SEED_*` 映射到 `xinghe.auth.employee-seed.*`。账号已存在时播种会 fail-fast，不会覆盖密码或角色。启动完成后关闭该开关并重启，再运行脚本。顾客密码只通过环境变量 `XINGHE_TEST_PASSWORD` 或脚本参数提供，不能写入仓库。
 
 ---
 
@@ -84,7 +97,9 @@ $env:MYSQL_DATABASE = "xinghe_stage_d"
 $env:MYSQL_USERNAME = "root"; $env:MYSQL_PASSWORD = "<数据库密码>"
 
 & "$root\scripts\stage-d-concurrency.ps1" -ResetDatabase -DbName "xinghe_stage_d" `
-  -SkuId 990001 -StoreId 1 -UserId "stage-d-user" `
+  -SkuId 990001 -UserId "stage-d-user" `
+  -StoreUsername "stage-d-employee" -StorePassword $env:XINGHE_STAGE_D_EMPLOYEE_PASSWORD `
+  -CustomerPassword $env:XINGHE_TEST_PASSWORD `
   -Requests 100 -Rounds 3 -InitialStock 10 `
   -OutputDirectory "$root\stage-d-results\stage-d-d02"
 ```
@@ -109,11 +124,11 @@ SELECT SUM(quantity) FROM trade_order_item WHERE sku_id = 990001;   -- = 10
 
 ### D-03 同 Token 并发支付
 
-**前置**：库 `xinghe_stage_d_d03`；用 `stage-d-same-token` 建一笔待支付订单（走 `AGENTS.md` 4.3 的 cart → checkout），记下 **父单号**。
+**前置**：库 `xinghe_stage_d_d03`；先按 `AGENTS.md` 4.3 用 CSRF + `/api/auth/register` 注册顾客账号 `stage-d-same-token`，再用该账号建一笔待支付订单（cart → checkout），并让建单与支付使用同一真实登录账号，记下 **父单号**。
 
 ```powershell
 & "$root\scripts\stage-d-payment-race.ps1" -BaseUrl "http://localhost:8081" `
-  -UserId "stage-d-same-token" -OrderNo "<父单号>" `
+  -UserId "stage-d-same-token" -LoginPassword $env:XINGHE_TEST_PASSWORD -OrderNo "<父单号>" `
   -Requests 20 -Rounds 1 -TokenMode "same-token" `
   -OutputDirectory "$root\stage-d-results\stage-d-d03"
 ```
@@ -137,11 +152,11 @@ SELECT sku_id, available_quantity, locked_quantity, sold_quantity FROM product_i
 
 ### D-04 不同 Token 并发支付
 
-**前置**：库 `xinghe_stage_d_d04`；用 `stage-d-different-token` 建一笔待支付订单（**创建订单的 `X-User-Id` 必须与后续支付请求完全一致**）。
+**前置**：库 `xinghe_stage_d_d04`；先注册顾客账号 `stage-d-different-token`，再用该账号建一笔待支付订单；登录账号必须与后续支付请求的 `-UserId` 完全一致。
 
 ```powershell
 & "$root\scripts\stage-d-payment-race.ps1" -BaseUrl "http://localhost:8081" `
-  -UserId "stage-d-different-token" -OrderNo "<父单号>" `
+  -UserId "stage-d-different-token" -LoginPassword $env:XINGHE_TEST_PASSWORD -OrderNo "<父单号>" `
   -Requests 20 -Rounds 1 -TokenMode "different-token" `
   -OutputDirectory "$root\stage-d-results\stage-d-d04"
 ```

@@ -1,6 +1,8 @@
 package com.xinghe.trade.product;
 
 import com.xinghe.trade.common.ApiResponse;
+import com.xinghe.trade.auth.AuthenticatedUser;
+import com.xinghe.trade.auth.CurrentUser;
 import com.xinghe.trade.inventory.ProductInventory;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -8,6 +10,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 
@@ -22,41 +25,48 @@ public class ProductManagementController {
 
     /** 查询当前店铺商品及库存；店铺归属由服务层校验。 */
     @GetMapping
-    public ApiResponse<List<ProductManagementService.ProductStockView>> list(
-            @RequestHeader("X-Store-Id") @Positive Long storeId) {
-        return ApiResponse.ok(service.list(storeId));
+    @PreAuthorize("hasRole('STORE_EMPLOYEE')")
+    public ApiResponse<ProductManagementService.ProductStockPage> list(
+            @CurrentUser AuthenticatedUser user,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "50") @Min(1) int size) {
+        return ApiResponse.ok(service.listPage(user.requireStoreId(), page, size));
     }
 
     /** 为请求指定的店铺创建商品和初始库存。 */
     @PostMapping
-    public ApiResponse<Product> create(@RequestHeader("X-Store-Id") @Positive Long storeId,
+    @PreAuthorize("hasRole('STORE_EMPLOYEE')")
+    public ApiResponse<Product> create(@CurrentUser AuthenticatedUser user,
                                        @Valid @RequestBody ProductRequest request) {
-        return ApiResponse.ok(service.create(storeId, request.toServiceRequest()));
+        return ApiResponse.ok(service.create(user.requireStoreId(), request.toServiceRequest()));
     }
 
     /** 更新当前店铺商品资料，库存需通过专用接口管理。 */
     @PutMapping("/{skuId}")
-    public ApiResponse<Product> update(@RequestHeader("X-Store-Id") @Positive Long storeId,
+    @PreAuthorize("hasRole('STORE_EMPLOYEE')")
+    public ApiResponse<Product> update(@CurrentUser AuthenticatedUser user,
                                        @PathVariable @Positive Long skuId,
                                        @Valid @RequestBody ProductUpdateRequest request) {
-        return ApiResponse.ok(service.update(storeId, skuId,
+        return ApiResponse.ok(service.update(user.requireStoreId(), skuId,
                 new ProductManagementService.ProductUpdateRequest(request.name(), request.description(), request.price())));
     }
 
     /** 切換店鋪商品的在售或下架狀態。 */
     @PutMapping("/{skuId}/status")
-    public ApiResponse<Product> setStatus(@RequestHeader("X-Store-Id") @Positive Long storeId,
+    @PreAuthorize("hasRole('STORE_EMPLOYEE')")
+    public ApiResponse<Product> setStatus(@CurrentUser AuthenticatedUser user,
                                           @PathVariable @Positive Long skuId,
                                           @Valid @RequestBody ProductStatusRequest request) {
-        return ApiResponse.ok(service.setStatus(storeId, skuId, request.status()));
+        return ApiResponse.ok(service.setStatus(user.requireStoreId(), skuId, request.status()));
     }
 
     /** 設定可用庫存，不改動已由待支付訂單鎖定的数量。 */
     @PutMapping("/{skuId}/inventory")
-    public ApiResponse<ProductInventory> setInventory(@RequestHeader("X-Store-Id") @Positive Long storeId,
+    @PreAuthorize("hasRole('STORE_EMPLOYEE')")
+    public ApiResponse<ProductInventory> setInventory(@CurrentUser AuthenticatedUser user,
                                                        @PathVariable @Positive Long skuId,
                                                        @Valid @RequestBody InventoryRequest request) {
-        return ApiResponse.ok(service.setInventory(storeId, skuId, request.availableQuantity()));
+        return ApiResponse.ok(service.setInventory(user.requireStoreId(), skuId, request.availableQuantity()));
     }
 
     /** 商品创建参数同时包含库存；更新接口只接收商品资料，避免误改库存。 */

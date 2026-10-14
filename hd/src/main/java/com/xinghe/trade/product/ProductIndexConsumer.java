@@ -21,7 +21,8 @@ public class ProductIndexConsumer {
         this.processing = processing;
     }
 
-    @RabbitListener(queues = "xinghe.product.index")
+    @RabbitListener(queues = {"xinghe.product.index", "xinghe.product.index.attempt.2",
+            "xinghe.product.index.attempt.3"})
     public void consume(Message message) {
         String payload = new String(message.getBody(), StandardCharsets.UTF_8);
         Long skuId = extractSkuId(payload);

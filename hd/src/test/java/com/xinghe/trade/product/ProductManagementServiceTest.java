@@ -7,6 +7,7 @@ import com.xinghe.trade.store.StoreMapper;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -15,6 +16,56 @@ import static org.mockito.Mockito.*;
 
 /** 覆盖店铺商品管理的归属检查和创建写入行为。 */
 class ProductManagementServiceTest {
+    @Test
+    void listsInventoryWithOneBatchLookup() {
+        ProductMapper products = mock(ProductMapper.class);
+        StoreMapper stores = mock(StoreMapper.class);
+        ProductInventoryMapper inventory = mock(ProductInventoryMapper.class);
+        Store store = new Store();
+        store.setId(5L);
+        store.setStatus("OPEN");
+        when(stores.selectById(5L)).thenReturn(store);
+        Product first = new Product(); first.setId(100L);
+        Product second = new Product(); second.setId(101L);
+        when(products.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(first, second));
+        com.xinghe.trade.inventory.ProductInventory firstStock = new com.xinghe.trade.inventory.ProductInventory();
+        firstStock.setSkuId(100L);
+        com.xinghe.trade.inventory.ProductInventory secondStock = new com.xinghe.trade.inventory.ProductInventory();
+        secondStock.setSkuId(101L);
+        when(inventory.selectBatchIds(List.of(100L, 101L))).thenReturn(List.of(firstStock, secondStock));
+
+        List<ProductManagementService.ProductStockView> result = new ProductManagementService(products, stores, inventory)
+                .listPage(5L, 0, 50).items();
+
+        assertThat(result).extracting(view -> view.inventory().getSkuId()).containsExactly(100L, 101L);
+        verify(inventory).selectBatchIds(List.of(100L, 101L));
+        verify(inventory, never()).selectById(any());
+    }
+
+    @Test
+    void productPageReturnsOnlyRequestedSizeAndHasMore() {
+        ProductMapper products = mock(ProductMapper.class);
+        StoreMapper stores = mock(StoreMapper.class);
+        ProductInventoryMapper inventory = mock(ProductInventoryMapper.class);
+        Store store = new Store(); store.setId(5L); store.setStatus("OPEN");
+        when(stores.selectById(5L)).thenReturn(store);
+        Product first = new Product(); first.setId(100L);
+        Product second = new Product(); second.setId(101L);
+        Product extra = new Product(); extra.setId(102L);
+        when(products.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(first, second, extra));
+        com.xinghe.trade.inventory.ProductInventory firstStock = new com.xinghe.trade.inventory.ProductInventory();
+        firstStock.setSkuId(100L);
+        com.xinghe.trade.inventory.ProductInventory secondStock = new com.xinghe.trade.inventory.ProductInventory();
+        secondStock.setSkuId(101L);
+        when(inventory.selectBatchIds(List.of(100L, 101L))).thenReturn(List.of(firstStock, secondStock));
+
+        ProductManagementService.ProductStockPage page = new ProductManagementService(products, stores, inventory)
+                .listPage(5L, 0, 2);
+
+        assertThat(page.items()).hasSize(2);
+        assertThat(page.hasMore()).isTrue();
+        verify(inventory).selectBatchIds(List.of(100L, 101L));
+    }
     /** 确认创建商品时店铺 ID 来自授权上下文，且同时初始化可用库存。 */
     @Test
     void createsProductAndInitialInventoryForOpenStore() {

@@ -1,5 +1,6 @@
 package com.xinghe.trade.order;
 
+import com.xinghe.trade.auth.AuthenticatedUser;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -12,25 +13,25 @@ import static org.mockito.Mockito.*;
 
 class OrderControllerTest {
     @Test
-    void checkoutUsesNormalizedHeaderIdentityOnly() {
+    void checkoutUsesAuthenticatedIdentityOnly() {
         OrderService service = mock(OrderService.class);
         when(service.checkout("user-1", "checkout-1"))
                 .thenReturn(List.of(new OrderService.OrderResult("XH12345678", "PENDING_PAYMENT")));
         OrderController controller = new OrderController(service);
 
-        controller.checkout(" user-1 ", "checkout-1");
+        controller.checkout(new AuthenticatedUser("user-1", "customer", "CUSTOMER", null), "checkout-1");
 
         verify(service).checkout("user-1", "checkout-1");
     }
 
     @Test
-    void normalizesBodyUserIdBeforePassingOrderToService() {
+    void overridesBodyUserIdWithAuthenticatedIdentityBeforePassingOrderToService() {
         OrderService service = mock(OrderService.class);
         when(service.create(any())).thenReturn(new OrderService.OrderResult("XH12345678", "PENDING_PAYMENT"));
         OrderController controller = new OrderController(service);
 
-        controller.create("user-1", new OrderController.CreateOrderRequest(
-                " user-1 ", 10001L, 1, new BigDecimal("199.00")));
+        controller.create(new AuthenticatedUser("user-1", "customer", "CUSTOMER", null),
+                new OrderController.CreateOrderRequest("attacker", 10001L, 1, new BigDecimal("199.00")));
 
         ArgumentCaptor<OrderController.CreateOrderRequest> request =
                 ArgumentCaptor.forClass(OrderController.CreateOrderRequest.class);

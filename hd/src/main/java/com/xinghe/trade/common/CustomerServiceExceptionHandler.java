@@ -1,11 +1,17 @@
 package com.xinghe.trade.common;
 
+import com.xinghe.trade.customer.CustomerConversationService;
+
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.access.AccessDeniedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -18,6 +24,12 @@ public class CustomerServiceExceptionHandler {
      // 统一的异常日志入口：排查线上问题时只依赖这一处输出。
     private static final Logger log = LoggerFactory.getLogger(CustomerServiceExceptionHandler.class);
 
+    @ExceptionHandler(CustomerConversationService.SessionNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ApiResponse<Void> missingSession(CustomerConversationService.SessionNotFoundException exception) {
+        return ApiResponse.fail(exception.getMessage());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> validation(MethodArgumentNotValidException exception, HttpServletRequest request) {
@@ -28,6 +40,20 @@ public class CustomerServiceExceptionHandler {
     @ExceptionHandler(HandlerMethodValidationException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> methodValidation(HandlerMethodValidationException exception, HttpServletRequest request) {
+        return ApiResponse.fail("请求参数无效");
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> argumentTypeMismatch(MethodArgumentTypeMismatchException exception,
+                                                  HttpServletRequest request) {
+        return ApiResponse.fail("请求参数无效");
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> malformedJson(HttpMessageNotReadableException exception,
+                                           HttpServletRequest request) {
         return ApiResponse.fail("请求参数无效");
     }
 
@@ -56,6 +82,20 @@ public class CustomerServiceExceptionHandler {
         // 越权访问要留痕：后续审计和排查都依赖这条记录。
         log.warn("越权访问被拒绝 {}: {}", request.getRequestURI(), exception.getMessage());
         return ApiResponse.fail(exception.getMessage());
+    }
+
+    /** 处理控制器解析当前用户时发现认证上下文无效的情况，保持与过滤器入口一致返回 401。 */
+    @ExceptionHandler(AuthenticationException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public ApiResponse<Void> unauthenticated(AuthenticationException exception, HttpServletRequest request) {
+        return ApiResponse.fail("请先登录");
+    }
+
+    /** 处理方法级安全注解拒绝，避免异常绕过过滤器的 AccessDeniedHandler 后变成 500。 */
+    @ExceptionHandler(AccessDeniedException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public ApiResponse<Void> accessDenied(AccessDeniedException exception, HttpServletRequest request) {
+        return ApiResponse.fail("无权访问");
     }
 
     @ExceptionHandler(Exception.class)

@@ -122,7 +122,7 @@ public class CartService {
 
     /** 校验并规范化请求头中的用户标识。 */
     private String requireUser(String userId) {
-        if (!StringUtils.hasText(userId)) throw new IllegalArgumentException("X-User-Id 请求头不能为空");
+        if (!StringUtils.hasText(userId)) throw new IllegalArgumentException("用户身份不能为空");
         return userId.trim();
     }
 

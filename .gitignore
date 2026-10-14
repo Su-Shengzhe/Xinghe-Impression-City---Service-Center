@@ -21,3 +21,9 @@ hd/maven-global-settings.xml
 # Temporary files
 *.tmp
 *.log
+
+# Generated acceptance evidence and local agent scratch files
+stage-d-results/
+stage-l7-results/
+stage-login-results/
+.codex-*

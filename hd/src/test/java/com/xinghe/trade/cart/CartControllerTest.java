@@ -1,5 +1,6 @@
 package com.xinghe.trade.cart;
 
+import com.xinghe.trade.auth.AuthenticatedUser;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -7,7 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class CartControllerTest {
-    /** 验证控制器从请求头读取用户标识，且请求体不提供用户身份。 */
+    /** 验证控制器只把认证上下文中的用户标识传给服务层。 */
     @Test
     void passesHeaderUserToServiceAndNeverAcceptsUserFromRequestBody() {
         CartService service = mock(CartService.class);
@@ -16,30 +17,31 @@ class CartControllerTest {
         when(service.add(anyString(), eq(10001L), eq(1))).thenReturn(line);
         CartController controller = new CartController(service);
 
-        var response = controller.add(" user-1 ", new CartController.CartQuantityRequest(10001L, 1));
+        var response = controller.add(new AuthenticatedUser("user-1", "customer", "CUSTOMER", null),
+                new CartController.CartQuantityRequest(10001L, 1));
 
-        verify(service).add(" user-1 ", 10001L, 1);
+        verify(service).add("user-1", 10001L, 1);
         assertThat(response.data()).isEqualTo(line);
     }
 
-    /** 验证删除请求将请求头用户与路径 SKU 传递给服务层。 */
+    /** 验证删除请求将认证用户与路径 SKU 传递给服务层。 */
     @Test
     void removesUsingPathSkuAndCurrentHeaderUser() {
         CartService service = mock(CartService.class);
         CartController controller = new CartController(service);
 
-        controller.remove("user-1", 10001L);
+        controller.remove(new AuthenticatedUser("user-1", "customer", "CUSTOMER", null), 10001L);
 
         verify(service).remove("user-1", 10001L);
     }
 
-    /** 验证清空请求只使用请求头中的当前用户。 */
+    /** 验证清空请求只使用认证上下文中的当前用户。 */
     @Test
     void clearsUsingCurrentHeaderUser() {
         CartService service = mock(CartService.class);
         CartController controller = new CartController(service);
 
-        controller.clear("user-1");
+        controller.clear(new AuthenticatedUser("user-1", "customer", "CUSTOMER", null));
 
         verify(service).clear("user-1");
     }

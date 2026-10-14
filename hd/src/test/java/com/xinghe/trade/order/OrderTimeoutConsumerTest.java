@@ -4,11 +4,26 @@ import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.RedisTemplate;
 import com.xinghe.trade.inventory.ProductInventoryMapper;
 import com.xinghe.trade.inventory.ProductInventory;
+import java.time.LocalDateTime;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class OrderTimeoutConsumerTest {
+    @Test
+    void doesNotCancelOrReleaseInventoryBeforeDeadline() {
+        TradeOrderMapper orders = mock(TradeOrderMapper.class);
+        ProductInventoryMapper inventory = mock(ProductInventoryMapper.class);
+        TradeOrder order = pendingOrder();
+        order.setExpiresAt(LocalDateTime.now().plusMinutes(5));
+        when(orders.selectById("XH12345678")).thenReturn(order);
+
+        new OrderTimeoutConsumer(mock(RedisTemplate.class), orders, inventory).cancel("XH12345678");
+
+        verify(orders, never()).update(any(TradeOrder.class), any());
+        verifyNoInteractions(inventory);
+    }
+
     @Test
     void releasesLockedStockWithTheCurrentInventoryVersion() {
         TradeOrderMapper orderMapper = mock(TradeOrderMapper.class);
@@ -19,6 +34,7 @@ class OrderTimeoutConsumerTest {
         inventory.setSkuId(9L);
         inventory.setLockedQuantity(2);
         inventory.setVersion(7L);
+        order.setExpiresAt(LocalDateTime.now().minusSeconds(1));
         when(orderMapper.selectById("XH12345678")).thenReturn(order);
         when(orderMapper.update(any(TradeOrder.class), any())).thenReturn(1);
         when(orderItemMapper.selectList(any())).thenReturn(java.util.List.of());

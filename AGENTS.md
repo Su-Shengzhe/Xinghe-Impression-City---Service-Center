@@ -191,8 +191,8 @@ SELECT id, name, status FROM product WHERE id = 990001;   -- 查不到 = 应用�
 
 | 脚本 | 用途 | 关键参数 |
 |---|---|---|
-| `scripts/stage-d-concurrency.ps1` | D-02 库存并发扣减 | `-ResetDatabase -DbName -SkuId -StoreId -UserId -Requests -Rounds -InitialStock -OutputDirectory` |
-| `scripts/stage-d-payment-race.ps1` | D-03 / D-04 并发支付 | `-OrderNo`(父单号) `-UserId -TokenMode same-token\|different-token -Requests -Rounds -OutputDirectory` |
+| `scripts/stage-d-concurrency.ps1` | D-02 库存并发扣减 | `-ResetDatabase -DbName -SkuId -UserId -Requests -Rounds -InitialStock -StoreUsername -StorePassword -CustomerPassword -OutputDirectory` |
+| `scripts/stage-d-payment-race.ps1` | D-03 / D-04 并发支付 | `-OrderNo`(父单号) `-UserId -LoginPassword -TokenMode same-token\|different-token -Requests -Rounds -OutputDirectory` |
 
 两者都**必须用 PowerShell 7** 运行。
 
@@ -209,14 +209,21 @@ SELECT id, name, status FROM product WHERE id = 990001;   -- 查不到 = 应用�
 ### 4.3 造一笔待支付订单（D-03 / D-04 通用）
 
 ```powershell
-$user    = "stage-d-same-token"     # D-04 用 stage-d-different-token；必须与后续支付请求的 X-User-Id 一致
-$headers = @{ "X-User-Id" = $user }
+$user    = "stage-d-same-token"     # D-04 用 stage-d-different-token；必须与后续支付请求的 -UserId 一致
+$session = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
+$csrf = Invoke-RestMethod -WebSession $session -Uri "http://localhost:8081/api/auth/csrf"
+$csrfToken = $session.Cookies.GetCookies("http://localhost:8081")['XSRF-TOKEN'].Value
+$headers = @{ "X-XSRF-TOKEN" = $csrfToken }
+Invoke-RestMethod -Method Post -WebSession $session -Uri "http://localhost:8081/api/auth/register" -Headers $headers `
+  -ContentType "application/json" -Body (@{ username = $user; password = $env:XINGHE_TEST_PASSWORD } | ConvertTo-Json -Compress)
+Invoke-RestMethod -Method Post -WebSession $session -Uri "http://localhost:8081/api/auth/login" -Headers $headers `
+  -ContentType "application/json" -Body (@{ username = $user; password = $env:XINGHE_TEST_PASSWORD } | ConvertTo-Json -Compress)
 
 Invoke-WebRequest -Method Post -Uri "http://localhost:8081/api/cart/items" -Headers $headers `
-  -ContentType "application/json" -Body '{"skuId":990001,"quantity":1}' -SkipHttpErrorCheck
+  -WebSession $session -ContentType "application/json" -Body '{"skuId":990001,"quantity":1}' -SkipHttpErrorCheck
 
 $checkout = Invoke-WebRequest -Method Post -Uri "http://localhost:8081/api/orders/checkout" `
-  -Headers ($headers + @{ "Idempotency-Token" = "prepare-$user" }) -SkipHttpErrorCheck
+  -WebSession $session -Headers ($headers + @{ "Idempotency-Token" = "prepare-$user" }) -SkipHttpErrorCheck
 $orderNo = ($checkout.Content | ConvertFrom-Json).data[0].orderNo   # data[0] 一定是父单
 ```
 
@@ -265,9 +272,9 @@ mysql -h localhost -P 3306 -u root --database=xinghe_stage_d_d04 --table `
 $env:MYSQL_DATABASE = "xinghe_stage_d_d04"
 cd "D:\codex-project\Xinghe Impression City Service Center\hd"; mvn -s maven-settings.xml spring-boot:run
 
-# 跑用例
+# 跑用例（先在目标专用库启动应用，并配置已播种的店员账号；脚本会为 D-02 每个请求注册独立顾客）
 & "$root\scripts\stage-d-payment-race.ps1" -BaseUrl "http://localhost:8081" -UserId $user `
-  -OrderNo $orderNo -Requests 20 -Rounds 1 -TokenMode "different-token" `
+  -OrderNo $orderNo -LoginPassword $env:XINGHE_TEST_PASSWORD -Requests 20 -Rounds 1 -TokenMode "different-token" `
   -OutputDirectory "$root\stage-d-results\stage-d-d04"
 ```
 
@@ -275,8 +282,8 @@ cd "D:\codex-project\Xinghe Impression City Service Center\hd"; mvn -s maven-set
 
 ## 7. 已知问题清单（写代码 / 写文档时一并修掉）
 
-1. `stage-d-concurrency.ps1:49`、`stage-d-payment-race.ps1:22/41` 等大量使用 `-SkipHttpErrorCheck` → 在 5.1 下不可用；建议在脚本首行加 `#Requires -Version 7`，让误用尽快失败。
-2. `stage-d-concurrency.ps1:101` 的 `git rev-parse HEAD` 在启动目录执行 → `Commit` 常为 `null`；应改为 `git -C $root rev-parse HEAD`。
+1. 两个阶段 D 脚本首行均有 `#Requires -Version 7`，并通过真实 `/api/auth/csrf` + `/api/auth/login` 会话调用接口；脚本不再发送 `X-User-Id` / `X-Store-Id`。D-02 需要 `XINGHE_STAGE_D_EMPLOYEE_USERNAME/PASSWORD`（或显式参数）和 `XINGHE_TEST_PASSWORD`。
+2. 脚本 metadata 使用仓库绝对定位 `git -C $PSScriptRoot\.. rev-parse HEAD`，不会因启动目录错误得到 `null`。
 3. `summary.json` 的 `DuplicatePayments` 口径会假阳性（见 4.2），报告里必须注明。
 4. `product` 表主键叫 `id`，**没有 `sku_id` 列**（`trade_order_item`、`product_inventory` 才有 `sku_id`）。查商品要用 `WHERE id = 990001`。
 5. 文档模板里的 `-OutputDirectory "$root\stage-d-results\stage-d"` 是笔误，应指向对应用例目录。

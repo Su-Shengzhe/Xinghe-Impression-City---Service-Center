@@ -1,6 +1,8 @@
 package com.xinghe.trade.customer;
 
 import com.xinghe.trade.common.ApiResponse;
+import com.xinghe.trade.auth.AuthenticatedUser;
+import com.xinghe.trade.auth.CurrentUser;
 import com.xinghe.trade.logistics.LogisticsQueryService;
 import com.xinghe.trade.product.Product;
 import com.xinghe.trade.product.ProductQueryService;
@@ -10,6 +12,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
@@ -33,33 +36,38 @@ public class CustomerServiceController {
     }
 
     @PostMapping("/sessions")
-    public ApiResponse<CustomerConversationService.SessionView> createSession(@RequestHeader("X-User-Id") String userId) {
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ApiResponse<CustomerConversationService.SessionView> createSession(@CurrentUser AuthenticatedUser user) {
         // 创建客服会话并返回会话标识，前端据此加载后续消息。
-        return ApiResponse.ok(conversationService.createSession(requireUser(userId)));
+        return ApiResponse.ok(conversationService.createSession(user.userId()));
     }
 
     @GetMapping("/sessions/{sessionId}")
-    public ApiResponse<CustomerConversationService.SessionView> session(@RequestHeader("X-User-Id") String userId,
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ApiResponse<CustomerConversationService.SessionView> session(@CurrentUser AuthenticatedUser user,
                                                                           @PathVariable String sessionId) {
         // 查询单个会话，同时校验请求用户是否拥有该会话。
-        return ApiResponse.ok(conversationService.requireSession(requireUser(userId), sessionId));
+        return ApiResponse.ok(conversationService.requireSession(user.userId(), sessionId));
     }
 
     @GetMapping("/sessions/{sessionId}/messages")
-    public ApiResponse<List<CustomerConversationService.MessageView>> history(@RequestHeader("X-User-Id") String userId,
-                                                                               @PathVariable String sessionId) {
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ApiResponse<List<CustomerConversationService.MessageView>> history(@CurrentUser AuthenticatedUser user,
+                                                                               @PathVariable String sessionId,
+                                                                               @RequestParam(required = false) String before) {
         // 提供会话历史接口，供前端切换会话时恢复消息列表。
-        return ApiResponse.ok(conversationService.history(requireUser(userId), sessionId));
+        return ApiResponse.ok(conversationService.history(user.userId(), sessionId, before));
     }
 
     @PostMapping(value = "/sessions/{sessionId}/messages", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter send(@RequestHeader("X-User-Id") String userId,
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public SseEmitter send(@CurrentUser AuthenticatedUser user,
                            @PathVariable String sessionId,
                            @Valid @RequestBody SendMessageRequest request) {
         // 通过 SSE 返回客服回复，完成后发送 complete 事件并关闭连接。
         SseEmitter emitter = new SseEmitter(30_000L);
         try {
-            CustomerConversationService.MessageView response = conversationService.reply(requireUser(userId), sessionId, request.content());
+            CustomerConversationService.MessageView response = conversationService.reply(user.userId(), sessionId, request.content());
             emitter.send(SseEmitter.event().name("message").data(response));
             emitter.send(SseEmitter.event().name("complete").data("DONE"));
             emitter.complete();
@@ -70,17 +78,19 @@ public class CustomerServiceController {
     }
 
     @GetMapping("/orders/{orderNo}")
-    public ApiResponse<OrderQueryService.OrderView> order(@RequestHeader("X-User-Id") String userId,
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ApiResponse<OrderQueryService.OrderView> order(@CurrentUser AuthenticatedUser user,
                                                            @PathVariable String orderNo) {
         // 提供受当前用户身份保护的订单查询工具接口。
-        return ApiResponse.ok(orderQueryService.query(requireUser(userId), orderNo));
+        return ApiResponse.ok(orderQueryService.query(user.userId(), orderNo));
     }
 
     @GetMapping("/orders/{orderNo}/logistics")
-    public ApiResponse<LogisticsQueryService.LogisticsView> logistics(@RequestHeader("X-User-Id") String userId,
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ApiResponse<LogisticsQueryService.LogisticsView> logistics(@CurrentUser AuthenticatedUser user,
                                                                        @PathVariable String orderNo) {
         // 提供先校验订单归属、再查询物流记录的工具接口。
-        return ApiResponse.ok(logisticsQueryService.query(requireUser(userId), orderNo));
+        return ApiResponse.ok(logisticsQueryService.query(user.userId(), orderNo));
     }
 
     @GetMapping("/products")
@@ -92,12 +102,6 @@ public class CustomerServiceController {
     @GetMapping("/products/{skuId}")
     public ApiResponse<Product> product(@PathVariable @Positive Long skuId) {
         return ApiResponse.ok(productQueryService.detail(skuId));
-    }
-
-    private String requireUser(String userId) {
-        // 统一校验联调请求头，避免空用户身份进入业务服务。
-        if (userId == null || userId.isBlank()) throw new IllegalArgumentException("X-User-Id 请求头不能为空");
-        return userId.trim();
     }
 
     public record SendMessageRequest(@NotBlank @Size(max = 1000) String content) {}

@@ -26,11 +26,15 @@ public class MessagingConfig {
     @Bean Queue orderTimeoutQueue() { return QueueBuilder.durable(ORDER_TIMEOUT_QUEUE).deadLetterExchange(ORDER_DLX).deadLetterRoutingKey("order.cancel").build(); }
     // 取消队列由 OrderTimeoutConsumer 消费并执行状态变更与库存补偿。
     @Bean Queue orderCancelQueue() { return QueueBuilder.durable("xinghe.order.cancel").deadLetterExchange(RETRY_EXCHANGE).deadLetterRoutingKey("order.cancel.retry.1").build(); }
-    @Bean Queue orderRetryQueue() { return QueueBuilder.durable("xinghe.order.cancel.retry.1").ttl(5000).deadLetterExchange(RETRY_EXCHANGE).deadLetterRoutingKey("order.cancel.retry.2").build(); }
-    @Bean Queue orderRetryFinalQueue() { return QueueBuilder.durable("xinghe.order.cancel.retry.2").ttl(30000).deadLetterExchange(EVENT_DLX).deadLetterRoutingKey("order.cancel").build(); }
+    @Bean Queue orderRetryQueue() { return QueueBuilder.durable("xinghe.order.cancel.retry.1").ttl(5000).deadLetterExchange(RETRY_EXCHANGE).deadLetterRoutingKey("order.cancel.attempt.2").build(); }
+    @Bean Queue orderSecondAttemptQueue() { return QueueBuilder.durable("xinghe.order.cancel.attempt.2").deadLetterExchange(RETRY_EXCHANGE).deadLetterRoutingKey("order.cancel.retry.2").build(); }
+    @Bean Queue orderRetryFinalQueue() { return QueueBuilder.durable("xinghe.order.cancel.retry.2").ttl(30000).deadLetterExchange(RETRY_EXCHANGE).deadLetterRoutingKey("order.cancel.attempt.3").build(); }
+    @Bean Queue orderThirdAttemptQueue() { return QueueBuilder.durable("xinghe.order.cancel.attempt.3").deadLetterExchange(EVENT_DLX).deadLetterRoutingKey("order.cancel").build(); }
     @Bean Queue productIndexQueue() { return QueueBuilder.durable("xinghe.product.index").deadLetterExchange(RETRY_EXCHANGE).deadLetterRoutingKey("product.index.retry.1").build(); }
-    @Bean Queue productIndexRetryQueue() { return QueueBuilder.durable("xinghe.product.index.retry.1").ttl(5000).deadLetterExchange(RETRY_EXCHANGE).deadLetterRoutingKey("product.index.retry.2").build(); }
-    @Bean Queue productIndexRetryFinalQueue() { return QueueBuilder.durable("xinghe.product.index.retry.2").ttl(30000).deadLetterExchange(EVENT_DLX).deadLetterRoutingKey("product.index").build(); }
+    @Bean Queue productIndexRetryQueue() { return QueueBuilder.durable("xinghe.product.index.retry.1").ttl(5000).deadLetterExchange(RETRY_EXCHANGE).deadLetterRoutingKey("product.index.attempt.2").build(); }
+    @Bean Queue productSecondAttemptQueue() { return QueueBuilder.durable("xinghe.product.index.attempt.2").deadLetterExchange(RETRY_EXCHANGE).deadLetterRoutingKey("product.index.retry.2").build(); }
+    @Bean Queue productIndexRetryFinalQueue() { return QueueBuilder.durable("xinghe.product.index.retry.2").ttl(30000).deadLetterExchange(RETRY_EXCHANGE).deadLetterRoutingKey("product.index.attempt.3").build(); }
+    @Bean Queue productThirdAttemptQueue() { return QueueBuilder.durable("xinghe.product.index.attempt.3").deadLetterExchange(EVENT_DLX).deadLetterRoutingKey("product.index").build(); }
     @Bean Queue businessDeadLetterQueue() { return QueueBuilder.durable("xinghe.business.dead").build(); }
     // 将订单超时路由键绑定到延迟队列。
     @Bean Binding timeoutBinding() { return BindingBuilder.bind(orderTimeoutQueue()).to(orderExchange()).with("order.timeout"); }
@@ -38,9 +42,13 @@ public class MessagingConfig {
     // 将死信路由键绑定到订单取消队列。
     @Bean Binding cancelBinding() { return BindingBuilder.bind(orderCancelQueue()).to(deadLetterExchange()).with("order.cancel"); }
     @Bean Binding orderRetryBinding(@Qualifier("retryExchange") DirectExchange retryExchange) { return BindingBuilder.bind(orderRetryQueue()).to(retryExchange).with("order.cancel.retry.1"); }
+    @Bean Binding orderSecondAttemptBinding(@Qualifier("retryExchange") DirectExchange retryExchange) { return BindingBuilder.bind(orderSecondAttemptQueue()).to(retryExchange).with("order.cancel.attempt.2"); }
     @Bean Binding orderRetryFinalBinding(@Qualifier("retryExchange") DirectExchange retryExchange) { return BindingBuilder.bind(orderRetryFinalQueue()).to(retryExchange).with("order.cancel.retry.2"); }
+    @Bean Binding orderThirdAttemptBinding(@Qualifier("retryExchange") DirectExchange retryExchange) { return BindingBuilder.bind(orderThirdAttemptQueue()).to(retryExchange).with("order.cancel.attempt.3"); }
     @Bean Binding productBinding(@Qualifier("eventExchange") DirectExchange eventExchange) { return BindingBuilder.bind(productIndexQueue()).to(eventExchange).with("product.index"); }
     @Bean Binding productRetryBinding(@Qualifier("retryExchange") DirectExchange retryExchange) { return BindingBuilder.bind(productIndexRetryQueue()).to(retryExchange).with("product.index.retry.1"); }
+    @Bean Binding productSecondAttemptBinding(@Qualifier("retryExchange") DirectExchange retryExchange) { return BindingBuilder.bind(productSecondAttemptQueue()).to(retryExchange).with("product.index.attempt.2"); }
     @Bean Binding productRetryFinalBinding(@Qualifier("retryExchange") DirectExchange retryExchange) { return BindingBuilder.bind(productIndexRetryFinalQueue()).to(retryExchange).with("product.index.retry.2"); }
+    @Bean Binding productThirdAttemptBinding(@Qualifier("retryExchange") DirectExchange retryExchange) { return BindingBuilder.bind(productThirdAttemptQueue()).to(retryExchange).with("product.index.attempt.3"); }
     @Bean Binding businessDeadBinding() { return BindingBuilder.bind(businessDeadLetterQueue()).to(eventDeadLetterExchange()).with("#"); }
 }

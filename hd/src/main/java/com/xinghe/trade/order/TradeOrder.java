@@ -30,6 +30,8 @@ public class TradeOrder {
     private LocalDateTime createdAt;
     /** 订单最近更新时间。 */
     private LocalDateTime updatedAt;
+    /** Deadline for releasing reserved inventory if payment has not completed. */
+    private LocalDateTime expiresAt;
 
     public String getOrderNo() { return orderNo; }
     public void setOrderNo(String orderNo) { this.orderNo = orderNo; }
@@ -51,4 +53,6 @@ public class TradeOrder {
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+    public LocalDateTime getExpiresAt() { return expiresAt; }
+    public void setExpiresAt(LocalDateTime expiresAt) { this.expiresAt = expiresAt; }
 }

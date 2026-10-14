@@ -87,12 +87,26 @@ public class CustomerConversationService {
     }
 
     public List<MessageView> history(String userId, String sessionId) {
-        // 返回当前用户会话的完整消息历史，按创建时间升序供前端恢复界面。
+        return history(userId, sessionId, null);
+    }
+
+    public List<MessageView> history(String userId, String sessionId, String beforeMessageId) {
+        // Read a bounded page, newest first in SQL, then return it chronologically to the UI.
         requireOwnedSession(userId, sessionId);
-        return messageMapper.selectList(new LambdaQueryWrapper<CustomerServiceMessage>()
-                        .eq(CustomerServiceMessage::getSessionId, sessionId)
-                        .orderByAsc(CustomerServiceMessage::getCreatedAt))
-                .stream()
+        LambdaQueryWrapper<CustomerServiceMessage> query = new LambdaQueryWrapper<CustomerServiceMessage>()
+                .eq(CustomerServiceMessage::getSessionId, sessionId);
+        if (StringUtils.hasText(beforeMessageId)) {
+            CustomerServiceMessage cursor = messageMapper.selectById(beforeMessageId);
+            if (cursor == null || !sessionId.equals(cursor.getSessionId())) throw new IllegalArgumentException("历史游标无效");
+            query.and(older -> older.lt(CustomerServiceMessage::getCreatedAt, cursor.getCreatedAt())
+                    .or(sameTime -> sameTime.eq(CustomerServiceMessage::getCreatedAt, cursor.getCreatedAt())
+                            .lt(CustomerServiceMessage::getMessageId, cursor.getMessageId())));
+        }
+        List<CustomerServiceMessage> page = new ArrayList<>(messageMapper.selectList(query
+                .orderByDesc(CustomerServiceMessage::getCreatedAt, CustomerServiceMessage::getMessageId)
+                .last("LIMIT 100")));
+        java.util.Collections.reverse(page);
+        return page.stream()
                 .map(message -> new MessageView(message.getMessageId(), message.getSessionId(), message.getMessageType(),
                         message.getIntent(), message.getContent(), message.getCreatedAt()))
                 .toList();
@@ -150,7 +164,7 @@ public class CustomerConversationService {
         // 统一校验用户和会话参数，并确认会话属于当前用户。
         if (!StringUtils.hasText(userId) || !StringUtils.hasText(sessionId)) throw new IllegalArgumentException("用户或会话信息不能为空");
         CustomerServiceSession session = sessionMapper.selectById(sessionId);
-        if (session == null) throw new IllegalArgumentException("客服会话不存在");
+        if (session == null) throw new SessionNotFoundException();
         if (!userId.equals(session.getUserId())) throw new SecurityException("无权访问该会话");
         return session;
     }
@@ -192,6 +206,9 @@ public class CustomerConversationService {
 
     public record SessionView(String sessionId, String userId, String status, LocalDateTime createdAt, LocalDateTime updatedAt) {}
     public record MessageView(String messageId, String sessionId, String messageType, String intent, String content, LocalDateTime createdAt) {}
+    public static final class SessionNotFoundException extends RuntimeException {
+        public SessionNotFoundException() { super("客服会话不存在"); }
+    }
     private record Reply(String intent, String content) {}
 }
 

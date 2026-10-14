@@ -1,18 +1,22 @@
 package com.xinghe.trade.cart;
 
 import com.xinghe.trade.common.ApiResponse;
+import com.xinghe.trade.auth.AuthenticatedUser;
+import com.xinghe.trade.auth.CurrentUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Max;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 
 /** 处理当前用户购物车的查询与商品项变更请求。 */
 @RestController
 @RequestMapping("/api/cart")
+@PreAuthorize("hasRole('CUSTOMER')")
 public class CartController {
     private final CartService cartService;
 
@@ -21,39 +25,39 @@ public class CartController {
         this.cartService = cartService;
     }
 
-    /** 查询请求头所标识用户的购物车。 */
+    /** 查询登录用户的购物车；身份由认证会话提供。 */
     @GetMapping
-    public ApiResponse<List<CartService.CartLine>> list(@RequestHeader("X-User-Id") String userId) {
-        return ApiResponse.ok(cartService.list(userId));
+    public ApiResponse<List<CartService.CartLine>> list(@CurrentUser AuthenticatedUser user) {
+        return ApiResponse.ok(cartService.list(user.userId()));
     }
 
     /** 清空当前用户购物车中的全部商品项。 */
     @DeleteMapping
-    public ApiResponse<Void> clear(@RequestHeader("X-User-Id") String userId) {
-        cartService.clear(userId);
+    public ApiResponse<Void> clear(@CurrentUser AuthenticatedUser user) {
+        cartService.clear(user.userId());
         return ApiResponse.ok(null);
     }
 
     /** 添加商品；重复添加同一 SKU 时由服务端累加数量。 */
     @PostMapping("/items")
-    public ApiResponse<CartService.CartLine> add(@RequestHeader("X-User-Id") String userId,
+    public ApiResponse<CartService.CartLine> add(@CurrentUser AuthenticatedUser user,
                                                   @Valid @RequestBody CartQuantityRequest request) {
-        return ApiResponse.ok(cartService.add(userId, request.skuId(), request.quantity()));
+        return ApiResponse.ok(cartService.add(user.userId(), request.skuId(), request.quantity()));
     }
 
     /** 将当前用户购物车中指定 SKU 的数量设置为请求值。 */
     @PutMapping("/items/{skuId}")
-    public ApiResponse<CartService.CartLine> setQuantity(@RequestHeader("X-User-Id") String userId,
+    public ApiResponse<CartService.CartLine> setQuantity(@CurrentUser AuthenticatedUser user,
                                                           @PathVariable @Positive Long skuId,
                                                           @Valid @RequestBody QuantityRequest request) {
-        return ApiResponse.ok(cartService.setQuantity(userId, skuId, request.quantity()));
+        return ApiResponse.ok(cartService.setQuantity(user.userId(), skuId, request.quantity()));
     }
 
     /** 删除当前用户购物车中指定 SKU。 */
     @DeleteMapping("/items/{skuId}")
-    public ApiResponse<Void> remove(@RequestHeader("X-User-Id") String userId,
+    public ApiResponse<Void> remove(@CurrentUser AuthenticatedUser user,
                                     @PathVariable @Positive Long skuId) {
-        cartService.remove(userId, skuId);
+        cartService.remove(user.userId(), skuId);
         return ApiResponse.ok(null);
     }
 

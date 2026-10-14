@@ -43,6 +43,7 @@ public class OrderService {
     private final ProductInventoryMapper inventoryMapper;
     private final LogisticsMapper logisticsMapper;
     private final PaymentIdempotencyMapper paymentIdempotencyMapper;
+    private final CheckoutIdempotencyMapper checkoutIdempotencyMapper;
     private final OutboxService outbox;
     @Value("${xinghe.messaging.enabled:false}")
     private boolean messagingEnabled;
@@ -52,7 +53,8 @@ public class OrderService {
                         TradeOrderMapper orderMapper, TradeOrderItemMapper orderItemMapper,
                         ProductMapper productMapper, CartItemMapper cartItemMapper,
                         ProductInventoryMapper inventoryMapper, LogisticsMapper logisticsMapper,
-                        PaymentIdempotencyMapper paymentIdempotencyMapper, OutboxService outbox) {
+                         PaymentIdempotencyMapper paymentIdempotencyMapper,
+                         CheckoutIdempotencyMapper checkoutIdempotencyMapper, OutboxService outbox) {
         this.redis = redis;
         this.rabbit = rabbit;
         this.orderMapper = orderMapper;
@@ -62,7 +64,17 @@ public class OrderService {
         this.inventoryMapper = inventoryMapper;
         this.logisticsMapper = logisticsMapper;
         this.paymentIdempotencyMapper = paymentIdempotencyMapper;
+        this.checkoutIdempotencyMapper = checkoutIdempotencyMapper;
         this.outbox = outbox;
+    }
+
+    public OrderService(RedisTemplate<String, Object> redis, RabbitTemplate rabbit,
+                        TradeOrderMapper orderMapper, TradeOrderItemMapper orderItemMapper,
+                        ProductMapper productMapper, CartItemMapper cartItemMapper,
+                        ProductInventoryMapper inventoryMapper, LogisticsMapper logisticsMapper,
+                        PaymentIdempotencyMapper paymentIdempotencyMapper, OutboxService outbox) {
+        this(redis, rabbit, orderMapper, orderItemMapper, productMapper, cartItemMapper,
+                inventoryMapper, logisticsMapper, paymentIdempotencyMapper, null, outbox);
     }
 
     public OrderService(RedisTemplate<String, Object> redis, RabbitTemplate rabbit,
@@ -118,15 +130,30 @@ public class OrderService {
         if (token == null || token.isBlank()) throw new IllegalArgumentException("Idempotency-Token 不能为空");
         String normalizedToken = token.trim();
         if (normalizedToken.length() > 128) throw new IllegalArgumentException("Idempotency-Token 不能超过 128 个字符");
-        String idempotencyKey = "checkout:idempotent:" + normalizedUserId + ":" + normalizedToken;
-        Boolean firstRequest = redis.opsForValue().setIfAbsent(idempotencyKey, "PROCESSING", Duration.ofMinutes(30));
-        if (firstRequest == null) throw new IllegalStateException("结算幂等服务暂不可用，请稍后重试");
-        if (Boolean.FALSE.equals(firstRequest)) {
-            Object storedOrderNo = redis.opsForValue().get(idempotencyKey);
-            if (storedOrderNo == null || "PROCESSING".equals(String.valueOf(storedOrderNo))) {
+        // The database token and orders commit or roll back together. Redis remains only for
+        // compatibility with callers that use the older test constructor.
+        String idempotencyKey = null;
+        if (checkoutIdempotencyMapper != null) {
+            int inserted = checkoutIdempotencyMapper.insertProcessing(normalizedUserId, normalizedToken);
+            CheckoutIdempotency stored = checkoutIdempotencyMapper.selectForUpdate(normalizedUserId, normalizedToken);
+            if (stored == null) throw new IllegalStateException("结算幂等记录写入失败");
+            if (inserted == 0) {
+                if ("SUCCEEDED".equals(stored.getStatus()) && stored.getParentOrderNo() != null) {
+                    return loadCheckoutResults(normalizedUserId, stored.getParentOrderNo());
+                }
                 throw new IllegalStateException("结算正在处理中，请稍后重试");
             }
-            return loadCheckoutResults(normalizedUserId, String.valueOf(storedOrderNo));
+        } else {
+            idempotencyKey = "checkout:idempotent:" + normalizedUserId + ":" + normalizedToken;
+            Boolean firstRequest = redis.opsForValue().setIfAbsent(idempotencyKey, "PROCESSING", Duration.ofMinutes(30));
+            if (firstRequest == null) throw new IllegalStateException("结算幂等服务暂不可用，请稍后重试");
+            if (Boolean.FALSE.equals(firstRequest)) {
+                Object storedOrderNo = redis.opsForValue().get(idempotencyKey);
+                if (storedOrderNo == null || "PROCESSING".equals(String.valueOf(storedOrderNo))) {
+                    throw new IllegalStateException("结算正在处理中，请稍后重试");
+                }
+                return loadCheckoutResults(normalizedUserId, String.valueOf(storedOrderNo));
+            }
         }
 
         try {
@@ -167,6 +194,7 @@ public class OrderService {
             parent.setStatus("PENDING_PAYMENT");
             parent.setCreatedAt(now);
             parent.setUpdatedAt(now);
+            parent.setExpiresAt(now.plusMinutes(15));
             if (orderMapper.insert(parent) != 1) throw new IllegalStateException("父订单写入失败");
 
             for (Map.Entry<Long, List<CartItem>> entry : itemsByStore.entrySet()) {
@@ -181,6 +209,7 @@ public class OrderService {
                 child.setStatus("PENDING_PAYMENT");
                 child.setCreatedAt(now);
                 child.setUpdatedAt(now);
+                child.setExpiresAt(now.plusMinutes(15));
                 if (orderMapper.insert(child) != 1) throw new IllegalStateException("店铺子订单写入失败");
 
                 for (CartItem cartItem : entry.getValue()) {
@@ -200,7 +229,7 @@ public class OrderService {
                 if (orderMapper.updateById(child) != 1) throw new IllegalStateException("子订单金额更新失败");
                 results.add(new OrderResult(childOrderNo, child.getStatus()));
                 if (messagingEnabled) {
-                    recordTimeout(childOrderNo, 15 * 60 * 1000L);
+                    recordTimeout(childOrderNo, child.getExpiresAt());
                 }
             }
 
@@ -210,10 +239,16 @@ public class OrderService {
                 throw new IllegalStateException("购物车快照已发生变化，请重试");
             }
             results.add(0, new OrderResult(parentOrderNo, "PENDING_PAYMENT"));
-            redis.opsForValue().set(idempotencyKey, parentOrderNo, Duration.ofHours(24));
+            if (checkoutIdempotencyMapper != null) {
+                if (checkoutIdempotencyMapper.markSucceeded(normalizedUserId, normalizedToken, parentOrderNo) != 1) {
+                    throw new IllegalStateException("结算幂等记录更新失败");
+                }
+            } else {
+                redis.opsForValue().set(idempotencyKey, parentOrderNo, Duration.ofHours(24));
+            }
             return List.copyOf(results);
         } catch (RuntimeException exception) {
-            redis.delete(idempotencyKey);
+            if (idempotencyKey != null) redis.delete(idempotencyKey);
             throw exception;
         }
     }
@@ -298,18 +333,22 @@ public class OrderService {
 
     /** 查询当前店铺的子订单及物流；这里只返回该店铺拥有的订单。 */
     @Transactional(readOnly = true)
-    public List<StoreOrderView> storeOrders(Long storeId) {
+    public StoreOrderPage storeOrdersPage(Long storeId, int page, int size) {
         if (storeId == null || storeId <= 0) throw new IllegalArgumentException("店铺 ID 必须为正整数");
-        List<TradeOrder> orders = orderMapper.selectStoreOrders(storeId);
-        if (orders.isEmpty()) return List.of();
+        if (page < 0 || page > 1000 || size < 1 || size > 100) throw new IllegalArgumentException("分页参数无效");
+        List<TradeOrder> orders = orderMapper.selectStoreOrders(storeId, page * size, size + 1);
+        boolean hasMore = orders.size() > size;
+        if (hasMore) orders = orders.subList(0, size);
+        if (orders.isEmpty()) return new StoreOrderPage(List.of(), page, size, false);
         List<String> orderNos = orders.stream().map(TradeOrder::getOrderNo).toList();
         Map<String, LogisticsRecord> logisticsByOrderNo = logisticsMapper.selectList(
                         new LambdaQueryWrapper<LogisticsRecord>().in(LogisticsRecord::getOrderNo, orderNos))
                 .stream()
                 .collect(Collectors.toMap(LogisticsRecord::getOrderNo, Function.identity(), (first, ignored) -> first));
-        return orders.stream()
+        List<StoreOrderView> items = orders.stream()
                 .map(order -> new StoreOrderView(order, logisticsByOrderNo.get(order.getOrderNo())))
                 .toList();
+        return new StoreOrderPage(items, page, size, hasMore);
     }
 
     /** 根据请求身份读取订单，避免查询和取消接口越权访问。 */
@@ -395,6 +434,7 @@ public class OrderService {
             order.setStatus("PENDING_PAYMENT");
             order.setCreatedAt(now);
             order.setUpdatedAt(now);
+            order.setExpiresAt(now.plusSeconds(30));
             // 阶段 A：数据库写入必须确认影响行数，否则抛错触发事务回滚和库存补偿。
             if (orderMapper.insert(order) != 1) throw new IllegalStateException("订单写入失败");
 
@@ -406,7 +446,7 @@ public class OrderService {
             item.setLineAmount(expectedAmount);
             if (orderItemMapper.insert(item) != 1) throw new IllegalStateException("订单明细写入失败");
 
-            if (messagingEnabled) recordTimeout(orderNo, 30_000L);
+            if (messagingEnabled) recordTimeout(orderNo, order.getExpiresAt());
         } catch (RuntimeException exception) {
             releaseInventory(request.skuId(), request.quantity());
             throw exception;
@@ -428,6 +468,9 @@ public class OrderService {
         if (order.getParentOrderNo() != null) throw new IllegalStateException("请支付父订单");
         if ("PAID".equals(order.getStatus())) return new OrderResult(orderNo, "PAID");
         if (!"PENDING_PAYMENT".equals(order.getStatus())) throw new IllegalStateException("当前订单不可支付");
+        if (order.getExpiresAt() != null && !order.getExpiresAt().isAfter(LocalDateTime.now())) {
+            throw new IllegalStateException("订单已超时，支付失败");
+        }
         String key = "pay:idempotent:" + token;
         Boolean first = redis.opsForValue().setIfAbsent(key, orderNo, Duration.ofMinutes(15));
         // 阶段 A：Redis 未返回幂等锁结果时立即失败关闭，禁止绕过重复支付保护。
@@ -523,6 +566,9 @@ public class OrderService {
         if (!"PENDING_PAYMENT".equals(lockedOrder.getStatus())) {
             throw new IllegalStateException("当前订单不可支付");
         }
+        if (lockedOrder.getExpiresAt() != null && !lockedOrder.getExpiresAt().isAfter(LocalDateTime.now())) {
+            throw new IllegalStateException("订单已超时，支付失败");
+        }
 
         TradeOrder update = new TradeOrder();
         update.setOrderNo(orderNo);
@@ -566,16 +612,17 @@ public class OrderService {
         }
     }
 
-    private void recordTimeout(String orderNo, long expiresInMs) {
+    private void recordTimeout(String orderNo, LocalDateTime expiresAt) {
         if (outbox == null) {
             rabbit.convertAndSend("xinghe.order.exchange", "order.timeout", orderNo, message -> {
-                message.getMessageProperties().setExpiration(String.valueOf(expiresInMs));
+                long delay = Math.max(1L, Duration.between(LocalDateTime.now(), expiresAt).toMillis());
+                message.getMessageProperties().setExpiration(String.valueOf(delay));
                 return message;
             });
             return;
         }
         outbox.record("ORDER_TIMEOUT", "order.timeout",
-                Map.of("orderNo", orderNo, "expiresAt", LocalDateTime.now().plusNanos(expiresInMs * 1_000_000L)));
+                Map.of("orderNo", orderNo, "expiresAt", expiresAt));
     }
 
     /** 将指定子订单的所有锁定库存确认为已售出。 */
@@ -647,4 +694,5 @@ public class OrderService {
     public record OrderResult(String orderNo, String status) {}
 
     public record StoreOrderView(TradeOrder order, LogisticsRecord logistics) {}
+    public record StoreOrderPage(List<StoreOrderView> items, int page, int size, boolean hasMore) {}
 }
