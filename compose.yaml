@@ -1,0 +1,121 @@
+name: xinghe-trade-center
+
+services:
+  mysql:
+    image: mysql:8.4.11
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-xinghe_trade}
+      MYSQL_USER: ${MYSQL_USERNAME:-xinghe}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD must be set}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+08:00
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  redis:
+    image: redis:7.4.11-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:4.1.8-management-alpine
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-xinghe}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set}
+      RABBITMQ_DEFAULT_VHOST: ${MYSQL_DATABASE:-xinghe_trade}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
+  backend:
+    image: xinghe-trade-backend:${XINGHE_VERSION:-1.0.0}
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      SERVER_PORT: 8081
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-xinghe_trade}
+      MYSQL_USERNAME: ${MYSQL_USERNAME:-xinghe}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD must be set}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SPRING_SESSION_REDIS_NAMESPACE: ${SPRING_SESSION_REDIS_NAMESPACE:-xinghe:session}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-xinghe}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set}
+      SPRING_RABBITMQ_VIRTUAL_HOST: ${MYSQL_DATABASE:-xinghe_trade}
+      XINGHE_MESSAGING_ENABLED: ${XINGHE_MESSAGING_ENABLED:-true}
+      XINGHE_ELASTICSEARCH_ENABLED: "false"
+      XINGHE_INDEX_REBUILD_API_ENABLED: "false"
+      XINGHE_SEED_ENABLED: "false"
+      XINGHE_AUTH_EMPLOYEE_SEED_ENABLED: ${XINGHE_AUTH_EMPLOYEE_SEED_ENABLED:-false}
+      XINGHE_AUTH_EMPLOYEE_SEED_USERNAME: ${XINGHE_AUTH_EMPLOYEE_SEED_USERNAME:-}
+      XINGHE_AUTH_EMPLOYEE_SEED_PASSWORD: ${XINGHE_AUTH_EMPLOYEE_SEED_PASSWORD:-}
+      XINGHE_AUTH_EMPLOYEE_SEED_STORE_ID: ${XINGHE_AUTH_EMPLOYEE_SEED_STORE_ID:-1}
+      XINGHE_AGENT_ENABLED: ${XINGHE_AGENT_ENABLED:-false}
+      XINGHE_AGENT_API_KEY: ${XINGHE_AGENT_API_KEY:-}
+      XINGHE_AGENT_BASE_URL: ${XINGHE_AGENT_BASE_URL:-https://api.openai.com/v1}
+      XINGHE_AGENT_MODEL: ${XINGHE_AGENT_MODEL:-gpt-4o-mini}
+      XINGHE_AGENT_TIMEOUT: ${XINGHE_AGENT_TIMEOUT:-8s}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8081}:8081"
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8081/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 60s
+
+  frontend:
+    image: xinghe-trade-frontend:${XINGHE_VERSION:-1.0.0}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  mysql-data:
+  redis-data:
+  rabbitmq-data:

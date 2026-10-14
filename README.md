@@ -1,6 +1,78 @@
 # 星河印象城交易服务中心
 
-基于 Spring Boot 3、MyBatis Plus、Redis、MySQL、RabbitMQ 和 Elasticsearch 的统一交易后台。
+基于 Spring Boot 3 和 Vue 3 的交易与客服系统。下面的 Docker 步骤适合把项目交给另一台 Windows 电脑使用；开发和测试说明保留在后半部分。
+
+## Docker 快速部署（接收方从这里开始）
+
+收到的离线包目录应包含 `images.tar`、`compose.yaml`、`README.md`、`requirements.txt`、`SHA256SUMS.txt`、`VERSION.txt` 和 `deploy/`。解压后，在 **包含 `compose.yaml` 的目录**打开 PowerShell 7，以下命令都从该目录执行。目标电脑只需安装并启动 Docker Desktop（选择 Linux containers 模式）和 PowerShell 7；镜像已在 `images.tar` 中，不需要单独安装 Java、Node.js、MySQL 或 Redis。详细依赖见 [`requirements.txt`](requirements.txt)。
+
+### 1. 配置本机密码
+
+```powershell
+Copy-Item .\deploy\docker.env.example .\deploy\docker.env
+notepad .\deploy\docker.env
+```
+
+把文件中每个以 `CHANGE_ME` 开头的示例值换成自己的强密码，至少包括 `MYSQL_PASSWORD`、`MYSQL_ROOT_PASSWORD`、`RABBITMQ_PASSWORD` 和 `XINGHE_AUTH_EMPLOYEE_SEED_PASSWORD`。保留 `XINGHE_VERSION=1.0.0`，使它与包内镜像标签一致。若电脑的 8080 端口已占用，可修改 `WEB_PORT`。`deploy/docker.env` 只保存在部署电脑，不要放进压缩包或提交到 Git。
+
+### 2. 导入镜像并启动
+
+```powershell
+pwsh -File .\deploy\import-and-start.ps1
+docker compose --env-file .\deploy\docker.env -f .\compose.yaml ps
+Invoke-RestMethod http://localhost:8081/actuator/health
+```
+
+等待 `ps` 显示各容器正常运行、健康检查返回 `UP`。浏览器打开 `http://localhost:8080`；从局域网其他设备访问时使用 `http://部署电脑的IP:8080`，并确认 Windows 防火墙允许该端口。若修改了 `WEB_PORT`，把地址中的 8080 换成新端口。
+
+### 3. 首次创建店铺和员工
+
+后端启动时 Flyway 自动创建数据库表，但不会创建营业店铺。**仅对新部署的自有数据库**执行一次：
+
+```powershell
+pwsh -File .\deploy\initialize-store.ps1 -StoreId 1 -StoreName '星河印象城店铺'
+```
+
+打开 `deploy/docker.env`，确认 `XINGHE_AUTH_EMPLOYEE_SEED_USERNAME` 是想要的员工用户名、`XINGHE_AUTH_EMPLOYEE_SEED_PASSWORD` 是刚设置的密码，`XINGHE_AUTH_EMPLOYEE_SEED_STORE_ID=1`，然后按顺序操作：
+
+1. 将 `XINGHE_AUTH_EMPLOYEE_SEED_ENABLED=false` 改成 `true`。
+2. 执行 `docker compose --env-file .\deploy\docker.env -f .\compose.yaml up -d --no-build --pull never --force-recreate backend`。
+3. 待后端恢复健康后，用员工账号登录页面。
+4. 立即把 `XINGHE_AUTH_EMPLOYEE_SEED_ENABLED` 改回 `false`，再执行一次第 2 步的命令。已有员工账号不会被覆盖；保持播种开关为 `true` 会使后续启动失败。
+
+员工登录后可以创建商品。顾客可直接在页面注册账号。演示数据播种和 Elasticsearch 在这套 Compose 配置中默认关闭，RabbitMQ 消息链路默认启用。
+
+### 4. 日常使用与排障
+
+```powershell
+# 查看状态和后端日志
+docker compose --env-file .\deploy\docker.env -f .\compose.yaml ps
+docker compose --env-file .\deploy\docker.env -f .\compose.yaml logs --tail 200 backend
+
+# 停止和再次启动；保留 MySQL、Redis、RabbitMQ 数据卷
+docker compose --env-file .\deploy\docker.env -f .\compose.yaml down
+docker compose --env-file .\deploy\docker.env -f .\compose.yaml up -d --no-build --pull never
+```
+
+不要运行 `docker compose down -v`，它会删除数据库等持久化卷。启动失败时先看 `ps` 和 `logs`；首次初始化后再次启动失败，还要检查员工播种开关是否已改回 `false`。外网部署需要在前端配置 HTTPS。更多操作与限制见 [`deploy/DEPLOYMENT.md`](deploy/DEPLOYMENT.md)。
+
+## 从源码构建或重新制作离线包
+
+需要源码构建时，先安装 Docker Desktop 和 PowerShell 7，并确认可访问 Docker Hub、Maven 和 npm 仓库。在**项目根目录**执行：
+
+```powershell
+Copy-Item .\deploy\docker.env.example .\deploy\docker.env
+notepad .\deploy\docker.env # 替换所有示例密码
+docker compose --env-file .\deploy\docker.env -f .\compose.yaml -f .\compose.build.yaml up -d --build
+```
+
+首次初始化仍按上面的第 3 步操作。要把镜像带到其他电脑，可在项目根目录运行：
+
+```powershell
+pwsh -File .\deploy\build-offline-bundle.ps1
+```
+
+完成后将 `docker-release\xinghe-trade-center\` 整个目录压缩并发送。构建脚本会一并放入 README、依赖清单、启动脚本、镜像归档、版本和校验值。Docker 镜像拉取遇到 `403`/`EOF` 时检查 Docker Engine 中的镜像源；直连 Docker Hub 超时时，在 Docker Desktop 的 Proxies 设置中为镜像拉取配置可用的 HTTPS 代理。
 
 ## 第一阶段：客服基础流程
 

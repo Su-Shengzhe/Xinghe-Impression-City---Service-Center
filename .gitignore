@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+deploy/docker.env
 
 # Build and dependency output
 hd/target/
@@ -26,4 +27,5 @@ hd/maven-global-settings.xml
 stage-d-results/
 stage-l7-results/
 stage-login-results/
+docker-release/
 .codex-*

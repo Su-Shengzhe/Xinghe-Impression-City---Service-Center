@@ -1,0 +1,48 @@
+星河印象城交易服务中心依赖清单
+==============================
+
+本文件用于交付核对，不是 Python/pip 的 requirements.txt；不要运行 pip install -r requirements.txt。
+项目是 Java/Spring Boot 后端 + Vue/Vite 前端。使用离线包部署时，目标电脑只需：
+- Docker Desktop，运行 Linux containers，并支持 docker compose
+- PowerShell 7，用于随包提供的 .ps1 脚本
+- 与 images.tar 中镜像一致的 CPU 架构（当前构建电脑为 Windows/amd64）
+
+离线部署所需的运行镜像（均在 images.tar 中）：
+- xinghe-trade-backend:1.0.0（Spring Boot 应用与 Java 17 运行时）
+- xinghe-trade-frontend:1.0.0（Vue 构建产物与 Nginx）
+- mysql:8.4.11（数据持久化）
+- redis:7.4.11-alpine（登录 Session 与缓存）
+- rabbitmq:4.1.8-management-alpine（订单与索引消息）
+
+仅从源码构建镜像时需要的基础镜像：
+- maven:3.9.16-eclipse-temurin-17-alpine
+- eclipse-temurin:17-jre-alpine
+- node:22.23.2-alpine
+- nginx:1.30.5-alpine
+
+后端直接依赖（准确声明以 hd/pom.xml 为准）：
+- Spring Boot 3.3.5，Java 17
+- spring-boot-starter-web、validation、jdbc、data-redis、security、actuator
+- spring-session-data-redis、spring-boot-starter-amqp、spring-boot-starter-data-elasticsearch
+- mybatis-plus-spring-boot3-starter 3.5.7
+- mysql-connector-j、flyway-core、flyway-mysql、lombok
+- 测试：spring-boot-starter-test、spring-security-test
+
+前端直接依赖（准确版本及所有传递依赖以 qd/package-lock.json 为准）：
+- vue 3.5.43
+- lucide-vue-next 0.468.0
+- vite 6.4.3、@vitejs/plugin-vue 5.2.4（构建工具）
+
+权威依赖和部署文件：
+- hd/pom.xml：Maven 直接依赖；Spring Boot 管理大部分依赖版本
+- qd/package.json + qd/package-lock.json：npm 直接依赖及传递依赖锁定版本
+- hd/Dockerfile + qd/Dockerfile：构建和运行镜像
+- compose.yaml：运行服务及镜像标签
+- compose.build.yaml：从源码构建前后端镜像
+- deploy/docker.env.example：配置模板，不含真实密码
+
+可选能力：
+- Elasticsearch 未包含在默认 Docker 包中；如启用商品索引，需另备与项目兼容且安装 IK 插件的 Elasticsearch 镜像。
+- AI 客服默认关闭；启用时需要 OpenAI-compatible 模型服务及 API Key。
+
+离线目标电脑不需要安装 Maven、Node.js、JDK 或 MySQL 客户端；这些运行组件已包含在镜像中。
